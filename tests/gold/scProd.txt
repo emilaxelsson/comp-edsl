@@ -1,0 +1,20 @@
+Lam v4
+ └╴Lam v3
+    └╴ForLoop
+       ├╴Min
+       │  ├╴ArrLen
+       │  │  └╴v4
+       │  └╴ArrLen
+       │     └╴v3
+       ├╴0.0
+       └╴Lam v2
+          └╴Lam v1
+             └╴Add
+                ├╴Mul
+                │  ├╴GetIx
+                │  │  ├╴v4
+                │  │  └╴v2
+                │  └╴GetIx
+                │     ├╴v3
+                │     └╴v2
+                └╴v1

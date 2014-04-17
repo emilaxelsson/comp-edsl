@@ -1,0 +1,36 @@
+Lam v6
+ └╴Lam v5
+    └╴Parallel
+       ├╴ArrLen
+       │  └╴v6
+       └╴Lam v4
+          └╴Parallel
+             ├╴ArrLen
+             │  └╴GetIx
+             │     ├╴v5
+             │     └╴0
+             └╴Lam v3
+                └╴ForLoop
+                   ├╴Min
+                   │  ├╴ArrLen
+                   │  │  └╴GetIx
+                   │  │     ├╴v6
+                   │  │     └╴v4
+                   │  └╴ArrLen
+                   │     └╴v5
+                   ├╴0.0
+                   └╴Lam v2
+                      └╴Lam v1
+                         └╴Add
+                            ├╴Mul
+                            │  ├╴GetIx
+                            │  │  ├╴GetIx
+                            │  │  │  ├╴v6
+                            │  │  │  └╴v4
+                            │  │  └╴v2
+                            │  └╴GetIx
+                            │     ├╴GetIx
+                            │     │  ├╴v5
+                            │     │  └╴v2
+                            │     └╴v3
+                            └╴v1

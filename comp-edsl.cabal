@@ -1,0 +1,98 @@
+name:           comp-edsl
+version:        0.1
+synopsis:       A library for creating Deeply embedded DSLs in Haskell
+description:    A library for creating Deeply embedded DSLs in Haskell
+homepage:       https://github.com/emilaxelsson/comp-edsl
+bug-reports:    https://github.com/emilaxelsson/comp-edsl/issues
+license:        BSD3
+license-file:   LICENSE
+author:         Emil Axelsson
+maintainer:     emax@chalmers.se
+copyright:      Copyright (c) 2014, Emil Axelsson
+Homepage:       https://github.com/emilaxelsson/syntactic
+Bug-reports:    https://github.com/emilaxelsson/syntactic/issues
+stability:      experimental
+category:       Language
+build-type:     Simple
+cabal-version:  >=1.10
+Tested-with:    GHC==7.6.2, GHC==7.8.2
+
+extra-source-files:
+  examples/*.hs
+
+library
+  exposed-modules:
+    EDSL.Syntax
+    EDSL.AG
+    EDSL.Constructs
+    EDSL.Eval
+
+  hs-source-dirs:
+    src
+
+  build-depends:
+    base >= 4.6 && <5.0,
+    compdata >= 0.7,
+    containers,
+    mtl,
+    syntactic >= 2.0
+
+  default-language:
+    Haskell2010
+
+  default-extensions:
+    ConstraintKinds
+    DeriveFoldable
+    DeriveFunctor
+    DeriveTraversable
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    Rank2Types
+    ScopedTypeVariables
+    TypeFamilies
+    TypeOperators
+
+  other-extensions:
+    ImplicitParams
+    OverlappingInstances
+    TemplateHaskell
+    UndecidableInstances
+
+test-suite NanoFeldspar
+  type: exitcode-stdio-1.0
+
+  hs-source-dirs: tests examples
+
+  main-is: NanoFeldsparTest.hs
+
+  default-language: Haskell2010
+
+  default-extensions:
+
+  other-extensions:
+    DeriveFoldable
+    DeriveFunctor
+    DeriveTraversable
+    FlexibleContexts
+    FlexibleInstances
+    GADTs
+    MultiParamTypeClasses
+    NoMonomorphismRestriction
+    TemplateHaskell
+    TypeFamilies
+    TypeOperators
+    UndecidableInstances
+
+  build-depends:
+    comp-edsl,
+    base,
+    QuickCheck,
+    syntactic,
+    tasty,
+    tasty-golden,
+    tasty-quickcheck,
+    utf8-string
+
