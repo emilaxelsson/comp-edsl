@@ -41,12 +41,20 @@ data Binding a
     | Lam Name a  -- ^ Lambda binding
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-derive [makeEqF, makeShowF, makeShowConstr] [''Binding]
+derive [makeEqF, makeShowConstr] [''Binding]
+
+showVar :: Name -> String
+showVar v = 'v' : show v
+
+instance ShowF Binding
+  where
+    showF (Var v)      = showVar v
+    showF (Lam v body) = "(\\" ++ showVar v ++ " -> "  ++ body ++ ")"
 
 instance Render Binding
   where
-    stringTreeAlg (Var v) = Node ('v' : show v) []
-    stringTreeAlg (Lam v body) = Node ("Lam v" ++ show v) [body]
+    stringTreeAlg (Var v) = Node (showVar v) []
+    stringTreeAlg (Lam v body) = Node ("Lam " ++ showVar v) [body]
 
 -- | The highest name bound by the first binders at every path from the root
 --
