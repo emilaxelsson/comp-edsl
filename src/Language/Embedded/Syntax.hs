@@ -33,7 +33,7 @@
 --
 -- Testing in GHCi:
 --
--- > *Main> test
+-- > *Main> drawAST (int 1 <+> int 2 :: Exp Int)
 -- > Add
 -- >  ├╴Int 1
 -- >  └╴Int 2
@@ -74,8 +74,8 @@ module Language.Embedded.Syntax
 
 
 import Data.Comp
-import Data.Comp.Ops   -- For the constructors of (:+:)
-import Data.Comp.Show  -- Needed for instances
+import Data.Comp.Ops      -- For the constructors of (:+:)
+import Data.Comp.Show ()  -- For instances
 import Data.Comp.Render
 import Data.Comp.Derive
 
