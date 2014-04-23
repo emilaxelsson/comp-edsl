@@ -35,7 +35,7 @@ instance ShowConstr Construct
 
 instance Render Construct
 
--- | Name binding constructs
+-- | Variables and binders
 data Binding a
     = Var Name    -- ^ Variable
     | Lam Name a  -- ^ Lambda binding
@@ -56,16 +56,26 @@ instance Render Binding
     stringTreeAlg (Var v) = Node (showVar v) []
     stringTreeAlg (Lam v body) = Node ("Lam " ++ showVar v) [body]
 
--- | The highest name bound by the first binders at every path from the root
+-- | Get the highest name bound by the first 'Lam' binders at every path from the root. If the term
+-- has /ordered binders/ \[1\], 'maxLam' returns the highest name introduced in the whole term.
 --
--- (Assuming that each binder binds a name that is higher than all names bound in its body, 'maxLam'
--- returns the highest name bound in the term.)
+-- \[1\] Ordered binders means that the names of 'Lam' nodes are decreasing along every path from
+-- the root.
 maxLam :: (Binding :<: f, Foldable f) => Term f -> Name
 maxLam (Term f)
     | Just (Lam n _) <- proj f = n
     | otherwise = maximum $ (0:) $ map maxLam $ toList f
 
--- | Smart constructor for lambda binding
+-- | Higher-order interface for typed variable binding
+--
+-- Assumptions:
+--
+--   * The body @f@ does not inspect its argument.
+--
+--   * Applying @f@ to a term with ordered binders results in a term with /ordered binders/ \[1\].
+--
+-- \[1\] Ordered binders means that the names of 'LamT' nodes are decreasing along every path from
+-- the root.
 --
 -- See "Using Circular Programs for Higher-Order Syntax"
 -- (ICFP 2013, <http://www.cse.chalmers.se/~emax/documents/axelsson2013using.pdf>)
