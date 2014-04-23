@@ -4,7 +4,22 @@
 
 -- | General syntactic language constructs
 
-module Language.Embedded.Constructs where
+module Language.Embedded.Constructs
+    ( Construct (..)
+    , Binding (..)
+    , maxLam
+    , lam
+    , App (..)
+    , Let (..)
+    , Lit (..)
+    , Cond (..)
+    , Args (..)
+    , argsOf
+    , argsS
+    , Env (..)
+    , getEnv
+    , lookEnv
+    ) where
 
 
 
