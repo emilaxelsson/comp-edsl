@@ -22,10 +22,10 @@ extra-source-files:
 
 library
   exposed-modules:
-    EDSL.Syntax
-    EDSL.AG
-    EDSL.Constructs
-    EDSL.Eval
+    Language.Embedded.Syntax
+    Language.Embedded.AG
+    Language.Embedded.Constructs
+    Language.Embedded.Eval
 
   hs-source-dirs:
     src

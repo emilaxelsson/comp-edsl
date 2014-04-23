@@ -8,7 +8,7 @@ import Test.Tasty.QuickCheck
 
 import Data.ByteString.Lazy.UTF8 (fromString)
 
-import EDSL.Syntax  -- TODO Export from NanoFeldspar?
+import Language.Embedded.Syntax  -- TODO Export from NanoFeldspar?
 import qualified NanoFeldspar as Nano
 
 

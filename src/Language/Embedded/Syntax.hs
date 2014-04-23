@@ -12,7 +12,7 @@
 -- > {-# LANGUAGE DeriveFoldable, DeriveFunctor, TemplateHaskell #-}
 -- >
 -- > import Data.Foldable
--- > import EDSL.Syntax
+-- > import Language.Embedded.Syntax
 -- >
 -- > data Arith a = Int Int | Add a a
 -- >   deriving (Functor, Foldable)
@@ -38,7 +38,7 @@
 -- >  ├╴Int 1
 -- >  └╴Int 2
 
-module EDSL.Syntax
+module Language.Embedded.Syntax
     ( -- * Term representation
       Cxt (..)
     , Term

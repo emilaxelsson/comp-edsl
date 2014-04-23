@@ -3,7 +3,7 @@
 
 -- | Attribute grammars for constructing semantic trees
 
-module EDSL.Eval where
+module Language.Embedded.Eval where
 
 
 
@@ -12,9 +12,9 @@ import qualified Data.Syntactic as S
 import Data.Syntactic.TypeUniverse
 import Data.Syntactic.Evaluation
 
-import EDSL.Syntax
-import EDSL.AG
-import EDSL.Constructs
+import Language.Embedded.Syntax
+import Language.Embedded.AG
+import Language.Embedded.Constructs
 
 
 

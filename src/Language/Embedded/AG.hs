@@ -4,7 +4,7 @@
 
 -- TODO This module will be implemented in compdata
 
-module EDSL.AG
+module Language.Embedded.AG
     ( module Data.Comp.Automata
     , Syn'
     , Syn

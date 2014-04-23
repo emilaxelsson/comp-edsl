@@ -4,7 +4,7 @@
 
 -- | General syntactic language constructs
 
-module EDSL.Constructs where
+module Language.Embedded.Constructs where
 
 
 
@@ -14,8 +14,8 @@ import Data.Tree
 import Data.Syntactic.TypeUniverse
 import Data.Syntactic.Constructs (Name (..))
 
-import EDSL.Syntax
-import EDSL.AG
+import Language.Embedded.Syntax
+import Language.Embedded.AG
 
 
 

@@ -27,10 +27,10 @@ import Data.Syntactic.TypeUniverse
 import Data.Syntactic.Evaluation (Sem (..))
   -- TODO Make a shim module for these imports. Export from Eval?
 
-import EDSL.Syntax
-import EDSL.AG
-import EDSL.Constructs
-import EDSL.Eval
+import Language.Embedded.Syntax
+import Language.Embedded.AG
+import Language.Embedded.Constructs
+import Language.Embedded.Eval
 
 
 
