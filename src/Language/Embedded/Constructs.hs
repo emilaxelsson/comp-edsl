@@ -92,7 +92,7 @@ maxLam (Term f)
 -- \[1\] Ordered binders means that the names of 'LamT' nodes are decreasing along every path from
 -- the root.
 --
--- See "Using Circular Programs for Higher-Order Syntax"
+-- See \"Using Circular Programs for Higher-Order Syntax\"
 -- (ICFP 2013, <http://www.cse.chalmers.se/~emax/documents/axelsson2013using.pdf>)
 lam :: (Binding :<: f, Foldable f) => (Term f -> Term f) -> Term f
 lam f = inject $ Lam n body

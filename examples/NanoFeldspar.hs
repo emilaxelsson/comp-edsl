@@ -21,11 +21,7 @@ import Prelude hiding
     )
 import qualified Prelude
 
-import Data.Syntactic (AST (..), (:&:) (..), E (..), EF (..))
 import qualified Data.Syntactic as S
-import Data.Syntactic.TypeUniverse
-import Data.Syntactic.Functional (Sem (..))
-  -- TODO Make a shim module for these imports. Export from Eval?
 
 import Language.Embedded.Syntax
 import Language.Embedded.AG

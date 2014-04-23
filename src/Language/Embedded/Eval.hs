@@ -3,7 +3,25 @@
 
 -- | Attribute grammars for constructing semantic trees
 
-module Language.Embedded.Eval where
+module Language.Embedded.Eval
+    ( -- * Things related to semantic trees in Syntactic
+      module Data.Syntactic
+    , module Data.Syntactic.TypeUniverse
+    , module Data.Syntactic.Functional
+      -- * Constructing semantic trees
+    , SemTree (..)
+    , semOf
+    , semOfT
+    , typeOf
+    , SemTreeAG (..)
+    , semTree
+    , evalTop
+    , semTreeS_A_A
+    , semTreeS_A_A_A
+    , semTreeS_a_a
+    , semTreeS_a_a_a
+    , semTreeS_a_a_B
+    ) where
 
 
 
