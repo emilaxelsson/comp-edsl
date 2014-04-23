@@ -12,7 +12,7 @@ import Data.Foldable (toList)
 import Data.Tree
 
 import Data.Syntactic.TypeUniverse
-import Data.Syntactic.Constructs (Name (..))
+import Data.Syntactic.Functional (Name (..))
 
 import Language.Embedded.Syntax
 import Language.Embedded.AG

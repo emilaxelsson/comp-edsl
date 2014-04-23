@@ -10,7 +10,7 @@ module Language.Embedded.Eval where
 import Data.Syntactic (AST (..), (:&:) (..), E (..), EF (..))
 import qualified Data.Syntactic as S
 import Data.Syntactic.TypeUniverse
-import Data.Syntactic.Evaluation
+import Data.Syntactic.Functional (Name, Sem (..), EvalEnv, evalSem)
 
 import Language.Embedded.Syntax
 import Language.Embedded.AG
