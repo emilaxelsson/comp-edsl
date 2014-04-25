@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeOperators #-}
+
 import Control.Monad
 import Data.List
 
@@ -11,6 +14,7 @@ import Data.ByteString.Lazy.UTF8 (fromString)
 import Data.Comp.Generic
 
 import Language.Embedded
+import Language.Embedded.Testing
 import qualified NanoFeldspar as Nano
 
 
@@ -41,7 +45,7 @@ prop_matMul =
 mkGold_scProd = writeFile "tests/gold/scProd.txt" $ showAST Nano.scProd
 mkGold_matMul = writeFile "tests/gold/matMul.txt" $ showAST Nano.matMul
 
-alphaRename :: Term Nano.FeldF -> Term Nano.FeldF
+alphaRename :: (Binding :<: f, Functor f) => Term f -> Term f
 alphaRename = transform rename
   where
     rename t
@@ -49,7 +53,7 @@ alphaRename = transform rename
         | Just (Lam v a) <- project t = inject (Lam (v+1) a)
         | otherwise = t
 
-badRename :: Term Nano.FeldF -> Term Nano.FeldF
+badRename :: (Binding :<: f, Functor f) => Term f -> Term f
 badRename = transform rename
   where
     rename t
@@ -57,20 +61,29 @@ badRename = transform rename
         | Just (Lam v a) <- project t = inject (Lam (v-1) a)
         | otherwise = t
 
-prop_alphaEq a = alphaEq a (alphaRename a)
+checkAlphaEq a    = alphaEq a (alphaRename a)
+checkAlphaEqBad a = not (alphaEq a (badRename a))
 
-prop_alphaEqBad a = alphaEq a (badRename a)
+prop_alphaEq = forAll genClosed checkAlphaEq
+
+prop_notAlphaEq =
+    forAll genClosed $ \t ->
+      forAll (mutateTerm t) $ \tm -> not (alphaEq t tm)
 
 tests = testGroup "TreeTests"
     [ goldenVsString "scProd tree" "tests/gold/scProd.txt" $ return $ fromString $ showAST Nano.scProd
     , goldenVsString "matMul tree" "tests/gold/matMul.txt" $ return $ fromString $ showAST Nano.matMul
+
     , testProperty "scProd eval" prop_scProd
     , testProperty "matMul eval" prop_matMul
-    , testProperty "alphaEq scProd"        (prop_alphaEq (desugar' Nano.scProd))
-    , testProperty "alphaEq matMul"        (prop_alphaEq (desugar' Nano.matMul))
+
+    , testProperty "alphaEq"               prop_alphaEq
+    , testProperty "notAlphaEq"            prop_notAlphaEq
+    , testProperty "alphaEq scProd"        (checkAlphaEq (desugar' Nano.scProd))
+    , testProperty "alphaEq matMul"        (checkAlphaEq (desugar' Nano.matMul))
     , testProperty "alphaEq scProd matMul" (not (alphaEq (desugar' Nano.scProd) (desugar' Nano.matMul)))
-    , testProperty "alphaEqBad scProd"     (not (prop_alphaEqBad (desugar' Nano.scProd)))
-    , testProperty "alphaEqBad matMul"     (not (prop_alphaEqBad (desugar' Nano.matMul)))
+    , testProperty "alphaEqBad scProd"     (checkAlphaEqBad (desugar' Nano.scProd))
+    , testProperty "alphaEqBad matMul"     (checkAlphaEqBad (desugar' Nano.matMul))
     ]
 
 main = defaultMain tests
