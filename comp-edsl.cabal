@@ -28,6 +28,7 @@ library
     Language.Embedded.Constructs
     Language.Embedded.Eval
     Language.Embedded.Algorithms
+    Language.Embedded.Testing
 
   hs-source-dirs:
     src
@@ -37,6 +38,7 @@ library
     compdata >= 0.7,
     containers,
     mtl,
+    QuickCheck,
     syntactic >= 2.0
 
   default-language:
