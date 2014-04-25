@@ -43,7 +43,12 @@ import Language.Embedded.AG
 data Construct a = Construct String [a]
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-derive [makeEqF, makeShowF] [''Construct]
+derive [makeEqF] [''Construct]
+
+instance ShowF Construct
+  where
+    showF (Construct c []) = c
+    showF (Construct c as) = "(" ++ unwords (c:as) ++ ")"
 
 instance ShowConstr Construct
   where
