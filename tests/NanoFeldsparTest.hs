@@ -10,9 +10,7 @@ import Data.ByteString.Lazy.UTF8 (fromString)
 
 import Data.Comp.Generic
 
-import Language.Embedded.Syntax
-import Language.Embedded.Constructs
-import Language.Embedded.Algorithms
+import Language.Embedded
 import qualified NanoFeldspar as Nano
 
 

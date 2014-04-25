@@ -23,10 +23,7 @@ import qualified Prelude
 
 import qualified Data.Syntactic as S
 
-import Language.Embedded.Syntax
-import Language.Embedded.AG
-import Language.Embedded.Constructs
-import Language.Embedded.Eval
+import Language.Embedded
 
 
 
