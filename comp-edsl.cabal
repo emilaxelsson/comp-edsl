@@ -26,6 +26,7 @@ library
     Language.Embedded.AG
     Language.Embedded.Constructs
     Language.Embedded.Eval
+    Language.Embedded.Algorithms
 
   hs-source-dirs:
     src
