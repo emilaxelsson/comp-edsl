@@ -3,6 +3,8 @@ module Language.Embedded.Testing where
 
 
 import Control.Monad
+import Data.Foldable (toList)
+import Data.Traversable (traverse)
 import Test.QuickCheck
 
 import Data.Comp.Render
@@ -17,7 +19,17 @@ import Debug.Trace
 -- * Generation of untyped lambda terms
 ----------------------------------------------------------------------------------------------------
 
-type TestSig = Construct :+: Binding
+class Constructors f
+  where
+    constructors :: [f ()]
+
+instance (Constructors f, Constructors g) => Constructors (f :+: g)
+  where
+    constructors = map Inl constructors ++ map Inr constructors
+
+instance Constructors Construct
+  where
+    constructors = [Construct ("constr" ++ show c) $ replicate c () | c <- [0..3]]
 
 -- | Generate a variable name
 genName :: Gen Name
@@ -34,20 +46,23 @@ pickVar b f env = frequency
     , (f, genName)
     ]
 
--- | Generate a random constructor
-genConstr :: Int -> Gen (Term TestSig) -> Gen (TestSig (Term TestSig))
-genConstr c term = fmap (inj . Construct ("constr" ++ show c)) $ replicateM c term
-
 genTerm
-    :: Bool    -- ^ Only closed terms?
+    :: (Constructors f, Functor f, Traversable f)
+    => Bool    -- ^ Only closed terms?
     -> Int     -- ^ Size
     -> [Name]  -- ^ Variables in scope
-    -> Gen (Term TestSig)
-genTerm _ 0 env = fmap Term $ genConstr 0 undefined
+    -> Gen (Term (Binding :+: f))
+genTerm _ 0 env
+    = fmap Term
+    $ oneof
+    $ map (return . Inr . fmap (const undefined))
+    $ filter (null . toList) constructors
 genTerm closed s env = frequency
     [ (1, do
-            c <- choose (0,3)
-            fmap Term $ genConstr c (genTerm closed (s `mod` c) env))
+            c <- oneof $ map (return . Inr) constructors
+            let l = length (toList c)
+            fmap Term $ traverse (\_ -> genTerm closed (s `mod` l) env) c
+      )
     , (freqVar, do
             v <- pickVar 5 freqFree env
             return $ inject $ Var v
@@ -62,11 +77,11 @@ genTerm closed s env = frequency
     freqFree = if closed then 0 else 1
 
 -- | Generate a possibly open term with many binders and high probability of shadowing
-genClosed :: Gen (Term TestSig)
+genClosed :: (Constructors f, Functor f, Traversable f) => Gen (Term (Binding :+: f))
 genClosed = sized $ \s -> genTerm True s []
 
 -- | Generate a possibly open term with many binders and high probability of shadowing
-genOpen :: Gen (Term TestSig)
+genOpen :: (Constructors f, Functor f, Traversable f) => Gen (Term (Binding :+: f))
 genOpen = sized $ \s -> genTerm False s []
 
 mutateName :: Name -> Gen Name
@@ -76,6 +91,8 @@ oneHot :: Int -> Gen [Bool]
 oneHot l = do
     n <- choose (0,l-1)
     return $ replicate n False ++ [True] ++ replicate (l-n-1) False
+
+type TestSig = Binding :+: Construct
 
 -- | Mutates a term to get another one that is guaranteed not to be alpha-equivalent
 mutateTerm :: Term TestSig -> Gen (Term TestSig)

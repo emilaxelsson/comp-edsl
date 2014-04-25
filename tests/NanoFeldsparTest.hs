@@ -64,7 +64,7 @@ badRename = transform rename
 checkAlphaEq a    = alphaEq a (alphaRename a)
 checkAlphaEqBad a = not (alphaEq a (badRename a))
 
-prop_alphaEq = forAll genClosed checkAlphaEq
+prop_alphaEq = forAll genClosed $ \(t :: Term TestSig) -> checkAlphaEq t
 
 prop_notAlphaEq =
     forAll genClosed $ \t ->
