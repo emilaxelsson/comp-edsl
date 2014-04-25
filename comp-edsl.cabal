@@ -88,6 +88,7 @@ test-suite NanoFeldspar
     UndecidableInstances
 
   build-depends:
+    compdata,
     comp-edsl,
     base,
     QuickCheck,

@@ -8,7 +8,11 @@ import Test.Tasty.QuickCheck
 
 import Data.ByteString.Lazy.UTF8 (fromString)
 
-import Language.Embedded.Syntax  -- TODO Export from NanoFeldspar?
+import Data.Comp.Generic
+
+import Language.Embedded.Syntax
+import Language.Embedded.Constructs
+import Language.Embedded.Algorithms
 import qualified NanoFeldspar as Nano
 
 
@@ -39,11 +43,36 @@ prop_matMul =
 mkGold_scProd = writeFile "tests/gold/scProd.txt" $ showAST Nano.scProd
 mkGold_matMul = writeFile "tests/gold/matMul.txt" $ showAST Nano.matMul
 
+alphaRename :: Term Nano.FeldF -> Term Nano.FeldF
+alphaRename = transform rename
+  where
+    rename t
+        | Just (Var v)   <- project t = inject (Var (v+1))
+        | Just (Lam v a) <- project t = inject (Lam (v+1) a)
+        | otherwise = t
+
+badRename :: Term Nano.FeldF -> Term Nano.FeldF
+badRename = transform rename
+  where
+    rename t
+        | Just (Var v)   <- project t = inject (Var (v+1))
+        | Just (Lam v a) <- project t = inject (Lam (v-1) a)
+        | otherwise = t
+
+prop_alphaEq a = alphaEq a (alphaRename a)
+
+prop_alphaEqBad a = alphaEq a (badRename a)
+
 tests = testGroup "TreeTests"
     [ goldenVsString "scProd tree" "tests/gold/scProd.txt" $ return $ fromString $ showAST Nano.scProd
     , goldenVsString "matMul tree" "tests/gold/matMul.txt" $ return $ fromString $ showAST Nano.matMul
-    , testProperty   "scProd eval" prop_scProd
-    , testProperty   "matMul eval" prop_matMul
+    , testProperty "scProd eval" prop_scProd
+    , testProperty "matMul eval" prop_matMul
+    , testProperty "alphaEq scProd"        (prop_alphaEq (desugar' Nano.scProd))
+    , testProperty "alphaEq matMul"        (prop_alphaEq (desugar' Nano.matMul))
+    , testProperty "alphaEq scProd matMul" (not (alphaEq (desugar' Nano.scProd) (desugar' Nano.matMul)))
+    , testProperty "alphaEqBad scProd"     (not (prop_alphaEqBad (desugar' Nano.scProd)))
+    , testProperty "alphaEqBad matMul"     (not (prop_alphaEqBad (desugar' Nano.matMul)))
     ]
 
 main = defaultMain tests
