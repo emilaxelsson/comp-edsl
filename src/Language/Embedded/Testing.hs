@@ -59,7 +59,7 @@ genTerm closed s env = frequency
     ]
   where
     freqVar  = if closed && null env then 0 else 1
-    freqFree = if closed || null env then 0 else 1
+    freqFree = if closed then 0 else 1
 
 -- | Generate a possibly open term with many binders and high probability of shadowing
 genClosed :: Gen (Term TestSig)
