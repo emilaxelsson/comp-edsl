@@ -46,3 +46,15 @@ alphaEq' env (Term a) (Term b)
 alphaEq :: (EqF f, Binding :<: f, Functor f, Foldable f) =>  Term f -> Term f -> Bool
 alphaEq = alphaEq' []
 
+-- | Generate an infinite list of fresh names given a list of allocated names
+--
+-- The argument is assumed to be sorted and not containing an infinite number of adjacent names.
+freshVars :: [Name] -> [Name]
+freshVars as = go 0 as
+  where
+    go c [] = [c..]
+    go c (v:as)
+      | c < v     = c : go (c+1) (v:as)
+      | c == v    = go (c+1) as
+      | otherwise = go c as
+

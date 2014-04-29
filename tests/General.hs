@@ -6,8 +6,11 @@ module General where
 
 
 
+import Control.Monad
+import Data.List
 import qualified Data.Set as Set
 
+import Test.QuickCheck
 import Test.Tasty
 import Test.Tasty.QuickCheck
 
@@ -44,4 +47,26 @@ prop_notAlphaEq =
 prop_freeVars = forAll genClosed $ \(t :: Term TestSig) -> Set.null $ freeVars t
 
 prop_allVars = forAll genOpen $ \(t :: Term TestSig) -> Set.isSubsetOf (freeVars t) (allVars t)
+
+-- Generate a finite sorted list of allocated variable names
+genAllocs = fmap (sort . map Name) $ do
+    n  <- choose (0,20)
+    replicateM n $ choose (0,20)
+
+-- Check that fresh variables are really fresh
+prop_freshVars (NonNegative n) = forAll genAllocs $ \as -> notElem (freshVars as !! n) as
+
+-- Check that the list of fresh variables is sorted
+prop_freshVarsSorted = forAll genAllocs $ \as ->
+    let fs = take 100 $ freshVars as
+    in  fs == sort fs
+
+-- Check that the list of fresh variables has no duplicates
+prop_freshVarsUnique = forAll genAllocs $ \as ->
+    let fs = take 100 $ freshVars as
+    in  fs == nub fs
+
+-- Check that fresh variables are not too big
+prop_freshVarsSmall (NonNegative n) = forAll genAllocs $ \as ->
+    (freshVars as !! n) <= (maximum (0:as) + fromIntegral n + 1)
 
