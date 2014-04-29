@@ -11,8 +11,6 @@ import Data.ByteString.Lazy.UTF8 (fromString)
 import Language.Embedded
 import qualified NanoFeldspar as Nano
 
-import General
-
 
 
 scProd :: [Float] -> [Float] -> Float
@@ -47,12 +45,6 @@ tests = testGroup "NanoFeldsparTests"
 
     , testProperty "scProd eval" prop_scProd
     , testProperty "matMul eval" prop_matMul
-
-    , testProperty "alphaEq scProd"        (checkAlphaEq (desugar' Nano.scProd))
-    , testProperty "alphaEq matMul"        (checkAlphaEq (desugar' Nano.matMul))
-    , testProperty "alphaEq scProd matMul" (not (alphaEq (desugar' Nano.scProd) (desugar' Nano.matMul)))
-    , testProperty "alphaEqBad scProd"     (checkAlphaEqBad (desugar' Nano.scProd))
-    , testProperty "alphaEqBad matMul"     (checkAlphaEqBad (desugar' Nano.matMul))
     ]
 
 main = defaultMain tests

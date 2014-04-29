@@ -77,9 +77,7 @@ test-suite General
   default-extensions:
 
   other-extensions:
-    FlexibleContexts
     ScopedTypeVariables
-    TypeOperators
 
   build-depends:
     comp-edsl,
@@ -115,7 +113,6 @@ test-suite NanoFeldspar
 
   build-depends:
     comp-edsl,
-    containers,
     base,
     QuickCheck,
     syntactic,

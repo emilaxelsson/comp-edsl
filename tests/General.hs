@@ -1,6 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators #-}
 
 module General where
 
@@ -10,35 +8,12 @@ import Control.Monad
 import Data.List
 import qualified Data.Set as Set
 
-import Test.QuickCheck
-import Test.Tasty
 import Test.Tasty.QuickCheck
 
 import Language.Embedded
 import Language.Embedded.Testing
 
 
-
-alphaRename :: (Binding :<: f, Functor f) => Term f -> Term f
-alphaRename = transform rename
-  where
-    rename t
-        | Just (Var v)   <- project t = inject (Var (v+1))
-        | Just (Lam v a) <- project t = inject (Lam (v+1) a)
-        | otherwise = t
-
-badRename :: (Binding :<: f, Functor f) => Term f -> Term f
-badRename = transform rename
-  where
-    rename t
-        | Just (Var v)   <- project t = inject (Var (v+1))
-        | Just (Lam v a) <- project t = inject (Lam (v-1) a)
-        | otherwise = t
-
-checkAlphaEq a    = alphaEq a (alphaRename a)
-checkAlphaEqBad a = not (alphaEq a (badRename a))
-
-prop_alphaEq = forAll genClosed $ \(t :: Term TestSig) -> checkAlphaEq t
 
 prop_notAlphaEq =
     forAll genClosed $ \t ->
