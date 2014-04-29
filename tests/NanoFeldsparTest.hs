@@ -1,8 +1,10 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 
 import Control.Monad
 import Data.List
+import qualified Data.Set as Set
 
 import Test.QuickCheck
 import Test.Tasty
@@ -70,6 +72,10 @@ prop_notAlphaEq =
     forAll genClosed $ \t ->
       forAll (mutateTerm t) $ \tm -> not (alphaEq t tm)
 
+prop_freeVars = forAll genClosed $ \(t :: Term TestSig) -> Set.null $ freeVars t
+
+prop_allVars = forAll genOpen $ \(t :: Term TestSig) -> Set.isSubsetOf (freeVars t) (allVars t)
+
 tests = testGroup "TreeTests"
     [ goldenVsString "scProd tree" "tests/gold/scProd.txt" $ return $ fromString $ showAST Nano.scProd
     , goldenVsString "matMul tree" "tests/gold/matMul.txt" $ return $ fromString $ showAST Nano.matMul
@@ -77,13 +83,16 @@ tests = testGroup "TreeTests"
     , testProperty "scProd eval" prop_scProd
     , testProperty "matMul eval" prop_matMul
 
-    , testProperty "alphaEq"               prop_alphaEq
-    , testProperty "notAlphaEq"            prop_notAlphaEq
     , testProperty "alphaEq scProd"        (checkAlphaEq (desugar' Nano.scProd))
     , testProperty "alphaEq matMul"        (checkAlphaEq (desugar' Nano.matMul))
     , testProperty "alphaEq scProd matMul" (not (alphaEq (desugar' Nano.scProd) (desugar' Nano.matMul)))
     , testProperty "alphaEqBad scProd"     (checkAlphaEqBad (desugar' Nano.scProd))
     , testProperty "alphaEqBad matMul"     (checkAlphaEqBad (desugar' Nano.matMul))
+
+    , testProperty "alphaEq"    prop_alphaEq
+    , testProperty "notAlphaEq" prop_notAlphaEq
+    , testProperty "freeVars"   prop_freeVars
+    , testProperty "allVars"    prop_allVars
     ]
 
 main = defaultMain tests

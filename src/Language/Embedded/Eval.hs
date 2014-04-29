@@ -28,7 +28,7 @@ module Language.Embedded.Eval
 import Data.Syntactic (AST (..), (:&:) (..), E (..), EF (..))
 import qualified Data.Syntactic as S
 import Data.Syntactic.TypeUniverse
-import Data.Syntactic.Functional (Name, Sem (..), EvalEnv, evalSem)
+import Data.Syntactic.Functional (Sem (..), EvalEnv, evalSem)
 
 import Language.Embedded.Syntax
 import Language.Embedded.AG

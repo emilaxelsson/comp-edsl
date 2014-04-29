@@ -85,6 +85,7 @@ test-suite NanoFeldspar
     GADTs
     MultiParamTypeClasses
     NoMonomorphismRestriction
+    ScopedTypeVariables
     TemplateHaskell
     TypeFamilies
     TypeOperators
@@ -93,6 +94,7 @@ test-suite NanoFeldspar
   build-depends:
     compdata,
     comp-edsl,
+    containers,
     base,
     QuickCheck,
     syntactic,

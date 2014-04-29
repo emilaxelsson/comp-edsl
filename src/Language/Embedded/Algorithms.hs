@@ -3,17 +3,26 @@ module Language.Embedded.Algorithms where
 
 
 import Data.Foldable (Foldable, toList)
-
-import Data.Syntactic.Functional (Name (..))
+import qualified Data.Foldable as Foldable
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 import Language.Embedded.Syntax
 import Language.Embedded.Constructs
 
 
 
-----------------------------------------------------------------------------------------------------
--- * Alpha-equivalence
-----------------------------------------------------------------------------------------------------
+-- | Get the set of free variables in a term
+freeVars :: (Binding :<: f, Functor f, Foldable f) => Term f -> Set Name
+freeVars t
+    | Just (Var v) <- project t = Set.singleton v
+freeVars t
+    | Just (Lam v a) <- project t = Set.delete v $ freeVars a
+freeVars (Term f) = Foldable.fold $ fmap freeVars f
+
+-- | Get the set of variables used in a term
+allVars :: (Binding :<: f, Functor f, Foldable f) => Term f -> Set Name
+allVars t = Set.fromList [v | Var v <- subterms' t]
 
 -- | Environment used by 'alphaEq''
 type AlphaEnv = [(Name,Name)]

@@ -55,6 +55,7 @@ module Language.Embedded.Syntax
     , module Data.Comp.Render
     , module Data.Comp.Derive
         -- Exports Foldable and Traversable
+    , module Data.Comp.Generic
     , TERM (..)
     , ConstrType
     , SmartConstr (..)
@@ -78,6 +79,7 @@ import Data.Comp.Ops      -- For the constructors of (:+:)
 import Data.Comp.Show ()  -- For instances
 import Data.Comp.Render
 import Data.Comp.Derive
+import Data.Comp.Generic
 
 
 
