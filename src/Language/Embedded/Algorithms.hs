@@ -21,8 +21,15 @@ freeVars t
 freeVars (Term f) = Foldable.fold $ fmap freeVars f
 
 -- | Get the set of variables used in a term
+usedVars :: (Binding :<: f, Functor f, Foldable f) => Term f -> Set Name
+usedVars t = Set.fromList [v | Var v <- subterms' t]
+
+-- | Get the set of variables introduced or used in a term
 allVars :: (Binding :<: f, Functor f, Foldable f) => Term f -> Set Name
-allVars t = Set.fromList [v | Var v <- subterms' t]
+allVars t = Set.fromList [v | v <- map viewBind $ subterms' t]
+  where
+    viewBind (Var v)   = v
+    viewBind (Lam v _) = v
 
 -- | Environment used by 'alphaEq''
 type AlphaEnv = [(Name,Name)]

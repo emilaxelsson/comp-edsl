@@ -46,7 +46,8 @@ prop_notAlphaEq =
 
 prop_freeVars = forAll genClosed $ \(t :: Term TestSig) -> Set.null $ freeVars t
 
-prop_allVars = forAll genOpen $ \(t :: Term TestSig) -> Set.isSubsetOf (freeVars t) (allVars t)
+prop_usedVars = forAll genOpen $ \(t :: Term TestSig) -> Set.isSubsetOf (freeVars t) (usedVars t)
+prop_allVars  = forAll genOpen $ \(t :: Term TestSig) -> Set.isSubsetOf (usedVars t) (allVars t)
 
 -- Generate a finite sorted list of allocated variable names
 genAllocs = fmap (sort . map Name) $ do
