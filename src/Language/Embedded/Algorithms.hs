@@ -78,7 +78,7 @@ freshVar = do
 -- The free variables are left untouched. The bound variables are given unique names using as small
 -- names as possible. The first argument is a list of reserved names. Reserved names and names of
 -- free variables are not used when renaming bound variables.
-renameUnique' :: (Binding :<: f, Functor f, Foldable f, Traversable f) => [Name] -> Term f -> Term f
+renameUnique' :: (Binding :<: f, Traversable f) => [Name] -> Term f -> Term f
 renameUnique' vs t = flip evalState fs $ go [] t
   where
     fs = freshVars $ Set.toAscList (freeVars t `Set.union` Set.fromList vs)
@@ -98,6 +98,21 @@ renameUnique' vs t = flip evalState fs $ go [] t
 --
 -- The free variables are left untouched. The bound variables are given unique names using as small
 -- names as possible. Names of free variables are not used when renaming bound variables.
-renameUnique :: (Binding :<: f, Functor f, Foldable f, Traversable f) => Term f -> Term f
+renameUnique :: (Binding :<: f, Traversable f) => Term f -> Term f
 renameUnique = renameUnique' []
+
+-- | Capture-avoiding substitution
+--
+-- Bound variables may get renamed, even when there is no risk for capturing.
+subst :: (Binding :<: f, Traversable f)
+    => Name    -- ^ Variable to replace
+    -> Term f  -- ^ Term to substitute for the variable
+    -> Term f  -- ^ Term to substitute in
+    -> Term f
+subst v new = transform sub . renameUnique' (Set.toList $ freeVars new)
+  where
+    sub t
+      | Just (Var v') <- project t
+      = if v==v' then new else t
+    sub t = t
 
