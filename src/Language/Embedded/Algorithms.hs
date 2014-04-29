@@ -33,6 +33,10 @@ allVars t = Set.fromList [v | v <- map viewBind $ subterms' t]
     viewBind (Var v)   = v
     viewBind (Lam v _) = v
 
+-- | Check if two constructors are equal
+constrEq :: (EqF f, Functor f) => f a -> f a -> Bool
+constrEq a b = eqF (fmap (const ()) a) (fmap (const ()) b)
+
 -- | Environment used by 'alphaEq''
 type AlphaEnv = [(Name,Name)]
 
@@ -48,7 +52,7 @@ alphaEq' env lam1 lam2
     , Just (Lam v2 body2) <- project lam2
     = alphaEq' ((v1,v2):env) body1 body2
 alphaEq' env (Term a) (Term b)
-    =  eqF (fmap (const ()) a) (fmap (const ()) b)
+    =  constrEq a b
     && all (uncurry (alphaEq' env)) (zip (toList a) (toList b))
 
 -- | Alpha-equivalence
