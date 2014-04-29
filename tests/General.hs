@@ -57,17 +57,14 @@ genAllocs = fmap (sort . map Name) $ do
 -- Check that fresh variables are really fresh
 prop_freshVars (NonNegative n) = forAll genAllocs $ \as -> notElem (freshVars as !! n) as
 
--- Check that the list of fresh variables is sorted
-prop_freshVarsSorted = forAll genAllocs $ \as ->
-    let fs = take 100 $ freshVars as
-    in  fs == sort fs
+-- Check that there are no gaps or duplicates in the list of fresh variables
+prop_freshVarsCompact = forAll (fmap nub genAllocs) $ \as ->
+    sort (take 100 (as ++ freshVars as)) == [0..99]
 
--- Check that the list of fresh variables has no duplicates
-prop_freshVarsUnique = forAll genAllocs $ \as ->
-    let fs = take 100 $ freshVars as
-    in  fs == nub fs
+-- A term is alpha-equivalent to its unique renaming
+prop_renameUnique = forAll genOpen $ \(t :: Term TestSig) -> alphaEq t (renameUnique t)
 
--- Check that fresh variables are not too big
-prop_freshVarsSmall (NonNegative n) = forAll genAllocs $ \as ->
-    (freshVars as !! n) <= (maximum (0:as) + fromIntegral n + 1)
+-- Renaming does not change the free variables
+prop_renameUniqueFree = forAll genOpen $ \(t :: Term TestSig) ->
+    freeVars t == freeVars (renameUnique t)
 

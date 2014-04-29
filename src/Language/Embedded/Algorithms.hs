@@ -2,10 +2,12 @@ module Language.Embedded.Algorithms where
 
 
 
+import Control.Monad.State
 import Data.Foldable (Foldable, toList)
 import qualified Data.Foldable as Foldable
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Traversable (traverse)
 
 import Language.Embedded.Syntax
 import Language.Embedded.Constructs
@@ -64,4 +66,38 @@ freshVars as = go 0 as
       | c < v     = c : go (c+1) (v:as)
       | c == v    = go (c+1) as
       | otherwise = go c as
+
+freshVar :: MonadState [Name] m => m Name
+freshVar = do
+    v:vs <- get
+    put vs
+    return v
+
+-- | Rename the bound variables in a term
+--
+-- The free variables are left untouched. The bound variables are given unique names using as small
+-- names as possible. The first argument is a list of reserved names. Reserved names and names of
+-- free variables are not used when renaming bound variables.
+renameUnique' :: (Binding :<: f, Functor f, Foldable f, Traversable f) => [Name] -> Term f -> Term f
+renameUnique' vs t = flip evalState fs $ go [] t
+  where
+    fs = freshVars $ Set.toAscList (freeVars t `Set.union` Set.fromList vs)
+    go env t
+        | Just (Var v) <- project t
+        = case lookup v env of
+            Just v' -> return $ inject (Var v')
+            _ -> return t
+        | Just (Lam v a) <- project t
+        = do
+            v' <- freshVar
+            a' <- go ((v,v'):env) a
+            return $ inject (Lam v' a')
+    go env (Term f) = fmap Term $ traverse (go env) f
+
+-- | Rename the bound variables in a term
+--
+-- The free variables are left untouched. The bound variables are given unique names using as small
+-- names as possible. Names of free variables are not used when renaming bound variables.
+renameUnique :: (Binding :<: f, Functor f, Foldable f, Traversable f) => Term f -> Term f
+renameUnique = renameUnique' []
 
