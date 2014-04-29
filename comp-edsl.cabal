@@ -65,12 +65,35 @@ library
     TemplateHaskell
     UndecidableInstances
 
+test-suite General
+  type: exitcode-stdio-1.0
+
+  hs-source-dirs: tests examples
+
+  main-is: GeneralTests.hs
+
+  default-language: Haskell2010
+
+  default-extensions:
+
+  other-extensions:
+    FlexibleContexts
+    ScopedTypeVariables
+    TypeOperators
+
+  build-depends:
+    comp-edsl,
+    containers,
+    base,
+    tasty,
+    tasty-quickcheck
+
 test-suite NanoFeldspar
   type: exitcode-stdio-1.0
 
   hs-source-dirs: tests examples
 
-  main-is: NanoFeldsparTest.hs
+  main-is: NanoFeldsparTests.hs
 
   default-language: Haskell2010
 
@@ -85,14 +108,12 @@ test-suite NanoFeldspar
     GADTs
     MultiParamTypeClasses
     NoMonomorphismRestriction
-    ScopedTypeVariables
     TemplateHaskell
     TypeFamilies
     TypeOperators
     UndecidableInstances
 
   build-depends:
-    compdata,
     comp-edsl,
     containers,
     base,
