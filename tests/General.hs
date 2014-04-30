@@ -40,7 +40,8 @@ prop_freshVarsCompact = forAll (fmap nub genAllocs) $ \as ->
     sort (take 100 (as ++ freshVars as)) == [0..99]
 
 -- A term is alpha-equivalent to its unique renaming
-prop_renameUnique = forAll genOpen $ \(t :: Term TestSig) -> alphaEq t (renameUnique t)
+prop_renameUnique  = forAll genOpen $ \(t :: Term TestSig) -> alphaEq t (renameUnique t)
+prop_renameUnique2 = forAll genOpen $ \(t :: Term TestSig) -> alphaEq (renameUnique t) t
 
 -- Renaming does not change the free variables
 prop_renameUniqueFree = forAll genOpen $ \(t :: Term TestSig) ->
@@ -60,7 +61,8 @@ prop_subst =
 
 prop_matchRefl = forAll genClosed $ \(t :: Term TestSig) -> isJust (match t t)
 
-prop_matchRename = forAll genClosed $ \(t :: Term TestSig) -> isJust (match t (renameUnique t))
+prop_matchRename  = forAll genClosed $ \(t :: Term TestSig) -> isJust (match t (renameUnique t))
+prop_matchRename2 = forAll genClosed $ \(t :: Term TestSig) -> isJust (match (renameUnique t) t)
 
 prop_noMatch =
     forAll genClosed $ \t ->

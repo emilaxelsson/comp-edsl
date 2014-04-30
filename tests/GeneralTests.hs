@@ -12,10 +12,12 @@ tests = testGroup "GeneralTests"
     , testProperty "freshVars"        prop_freshVars
     , testProperty "freshVarsCompact" prop_freshVarsCompact
     , testProperty "renameUnique"     prop_renameUnique
+    , testProperty "renameUnique2"    prop_renameUnique2
     , testProperty "renameUniqueFree" prop_renameUniqueFree
     , testProperty "subst"            prop_subst
     , testProperty "matchRefl"        prop_matchRefl
     , testProperty "matchRename"      prop_matchRename
+    , testProperty "matchRename2"     prop_matchRename2
     , testProperty "noMatch"          prop_noMatch
     ]
 
