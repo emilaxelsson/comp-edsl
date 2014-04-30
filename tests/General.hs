@@ -46,6 +46,18 @@ prop_renameUnique = forAll genOpen $ \(t :: Term TestSig) -> alphaEq t (renameUn
 prop_renameUniqueFree = forAll genOpen $ \(t :: Term TestSig) ->
     freeVars t == freeVars (renameUnique t)
 
+-- Matching a substituted term against the original term yields the expected mapping
+prop_subst =
+    forAll genOpen $ \(t :: Term TestSig) ->
+      forAll genOpen $ \(new :: Term TestSig) ->
+        let fv = Set.toList (freeVars t)
+        in  not (null fv) ==>
+              ( forAll (oneof $ map return fv) $ \v ->
+                  let t'      = subst v new t
+                      Just ms = match t t'
+                  in  and [(w==v && t==new) || (t == inject (Var w)) | (w,t) <- ms]
+              )
+
 prop_matchRefl = forAll genClosed $ \(t :: Term TestSig) -> isJust (match t t)
 
 prop_matchRename = forAll genClosed $ \(t :: Term TestSig) -> isJust (match t (renameUnique t))
