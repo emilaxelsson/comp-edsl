@@ -4,7 +4,8 @@ import Test.Tasty.QuickCheck
 import General
 
 tests = testGroup "GeneralTests"
-    [ testProperty "notAlphaEq"       prop_notAlphaEq
+    [ testProperty "alphaEqRefl"      prop_alphaEqRefl
+    , testProperty "notAlphaEq"       prop_notAlphaEq
     , testProperty "freeVars"         prop_freeVars
     , testProperty "usedVars"         prop_usedVars
     , testProperty "allVars"          prop_allVars

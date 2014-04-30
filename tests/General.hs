@@ -15,6 +15,8 @@ import Language.Embedded.Testing
 
 
 
+prop_alphaEqRefl = forAll genClosed $ \(t :: Term TestSig) -> alphaEq t t
+
 prop_notAlphaEq =
     forAll genClosed $ \t ->
       forAll (mutateTerm t) $ \tm -> not (alphaEq t tm)
