@@ -6,6 +6,7 @@ module General where
 
 import Control.Monad
 import Data.List
+import qualified Data.Map as Map
 import Data.Maybe
 import qualified Data.Set as Set
 
@@ -50,14 +51,25 @@ prop_renameUniqueFree = forAll genOpen $ \(t :: Term TestSig) ->
 -- Matching a substituted term against the original term yields the expected mapping
 prop_subst =
     forAll genOpen $ \(t :: Term TestSig) ->
-      forAll genOpen $ \(new :: Term TestSig) ->
-        let fv = Set.toList (freeVars t)
-        in  not (null fv) ==>
+    let fv = Set.toList (freeVars t)
+    in  not (null fv) ==>
+          forAll genOpen $ \(new :: Term TestSig) ->
               ( forAll (oneof $ map return fv) $ \v ->
                   let t'      = subst v new t
                       Just ms = match t t'
                   in  and [(w==v && t==new) || (t == inject (Var w)) | (w,t) <- ms]
               )
+
+-- Matching a substituted term against the original term yields the expected mapping
+prop_parSubst =
+    forAll genOpen $ \(t :: Term TestSig) ->
+      let fv = Set.toList (freeVars t)
+      in  not (null fv) ==>
+            forAll (replicateM (length fv) genOpen) $ \(ss :: [Term TestSig]) ->
+              let sub       = zip fv ss
+                  t'        = parSubst sub t
+                  Just sub' = match t t'
+              in  Map.fromList sub == Map.fromList sub'
 
 prop_matchRefl = forAll genClosed $ \(t :: Term TestSig) -> isJust (match t t)
 

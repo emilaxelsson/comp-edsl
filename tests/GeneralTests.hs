@@ -15,6 +15,7 @@ tests = testGroup "GeneralTests"
     , testProperty "renameUnique2"    prop_renameUnique2
     , testProperty "renameUniqueFree" prop_renameUniqueFree
     , testProperty "subst"            prop_subst
+    , testProperty "parSubst"         prop_parSubst
     , testProperty "matchRefl"        prop_matchRefl
     , testProperty "matchRename"      prop_matchRename
     , testProperty "matchRename2"     prop_matchRename2
