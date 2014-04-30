@@ -6,6 +6,7 @@ module General where
 
 import Control.Monad
 import Data.List
+import Data.Maybe
 import qualified Data.Set as Set
 
 import Test.Tasty.QuickCheck
@@ -44,4 +45,12 @@ prop_renameUnique = forAll genOpen $ \(t :: Term TestSig) -> alphaEq t (renameUn
 -- Renaming does not change the free variables
 prop_renameUniqueFree = forAll genOpen $ \(t :: Term TestSig) ->
     freeVars t == freeVars (renameUnique t)
+
+prop_matchRefl = forAll genClosed $ \(t :: Term TestSig) -> isJust (match t t)
+
+prop_matchRename = forAll genClosed $ \(t :: Term TestSig) -> isJust (match t (renameUnique t))
+
+prop_noMatch =
+    forAll genClosed $ \t ->
+      forAll (mutateTerm t) $ \tm -> isNothing (match t tm)
 

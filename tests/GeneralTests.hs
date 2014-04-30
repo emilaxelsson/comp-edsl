@@ -13,6 +13,9 @@ tests = testGroup "GeneralTests"
     , testProperty "freshVarsCompact" prop_freshVarsCompact
     , testProperty "renameUnique"     prop_renameUnique
     , testProperty "renameUniqueFree" prop_renameUniqueFree
+    , testProperty "matchRefl"        prop_matchRefl
+    , testProperty "matchRename"      prop_matchRename
+    , testProperty "noMatch"          prop_noMatch
     ]
 
 main = defaultMain tests

@@ -120,3 +120,32 @@ subst v new = transform sub . renameUnique' (Set.toList $ freeVars new)
       = if v==v' then new else t
     sub t = t
 
+-- | Pattern matching with alpha equivalence
+--
+-- Free variables are treated as meta variables in the pattern. If there are no free variables,
+-- 'match' corresponds to 'alphaEq'.
+match :: (Binding :<: f, EqF f, Functor f, Foldable f)
+    => Term f  -- ^ Pattern
+    -> Term f  -- ^ Term
+    -> Maybe [(Name, Term f)]
+match = go []
+  where
+    go env p t
+      | Just (Var v) <- project p
+      , Just (Var w) <- project t
+      , Just v'      <- lookup v env
+      , w == v'
+      = Just []
+    go env p t
+      | Just (Var v) <- project p
+      , Nothing      <- lookup v env
+      = Just [(v,t)]
+    go env p t
+      | Just (Lam v p') <- project p
+      , Just (Lam w t') <- project t
+      = go ((v,w):env) p' t'
+    go env (Term pf) (Term tf)
+      | constrEq pf tf
+      = fmap concat $ sequence [go env p t | (p,t) <- toList pf `zip` toList tf]
+    go _ _ _ = Nothing
+
