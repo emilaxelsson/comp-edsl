@@ -18,6 +18,7 @@ before_install:
  - cd syntactic && git checkout master
  - echo "Using syntactic from " && git rev-parse HEAD
  - cd $TRAVIS_BUILD_DIR
+ - cabal update
  - cabal install syntactic/ ./
 
 install:
