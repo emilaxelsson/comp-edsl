@@ -105,6 +105,22 @@ renameUnique' vs t = flip evalState fs $ go [] t
 renameUnique :: (Binding :<: f, Traversable f) => Term f -> Term f
 renameUnique = renameUnique' []
 
+-- | Capture-avoiding parallel substitution
+--
+-- Bound variables may get renamed, even when there is no risk for capturing.
+parSubst :: (Binding :<: f, Traversable f)
+    => [(Name, Term f)]  -- ^ Substitution
+    -> Term f
+    -> Term f
+parSubst s = transform sub . renameUnique' fvs
+  where
+    fvs = concatMap (Set.toList . freeVars . snd) s
+    sub t
+      | Just (Var v') <- project t
+      , Just new      <- lookup v' s
+      = new
+    sub t = t
+
 -- | Capture-avoiding substitution
 --
 -- Bound variables may get renamed, even when there is no risk for capturing.
@@ -113,12 +129,7 @@ subst :: (Binding :<: f, Traversable f)
     -> Term f  -- ^ Term to substitute for the variable
     -> Term f  -- ^ Term to substitute in
     -> Term f
-subst v new = transform sub . renameUnique' (Set.toList $ freeVars new)
-  where
-    sub t
-      | Just (Var v') <- project t
-      = if v==v' then new else t
-    sub t = t
+subst v new = parSubst [(v,new)]
 
 -- | Pattern matching with alpha equivalence
 --
