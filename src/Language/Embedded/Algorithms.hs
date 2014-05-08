@@ -107,7 +107,8 @@ renameUnique = renameUnique' []
 
 -- | Capture-avoiding parallel substitution
 --
--- Bound variables may get renamed, even when there is no risk for capturing.
+-- If the list contains multiple mappings for the same variable, the first one has precedence. Bound
+-- variables may get renamed, even when there is no risk for capturing.
 parSubst :: (Binding :<: f, Traversable f)
     => [(Name, Term f)]  -- ^ Substitution
     -> Term f
@@ -133,8 +134,11 @@ subst v new = parSubst [(v,new)]
 
 -- | Pattern matching with alpha equivalence
 --
--- Free variables are treated as meta variables in the pattern. If there are no free variables,
--- 'match' corresponds to 'alphaEq'.
+-- Free variables are treated as meta variables in the pattern. Each occurrence of a meta variable
+-- results in a mapping in the result list, and there is no check that the occurrences of a given
+-- variable are equal.
+--
+-- If there are no free variables, 'match' corresponds to 'alphaEq'.
 match :: (Binding :<: f, EqF f, Functor f, Foldable f)
     => Term f  -- ^ Pattern
     -> Term f  -- ^ Term

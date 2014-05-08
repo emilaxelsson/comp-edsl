@@ -84,6 +84,8 @@ genClosed = sized $ \s -> genTerm True s []
 genOpen :: (Constructors f, Functor f, Traversable f) => Gen (Term (Binding :+: f))
 genOpen = sized $ \s -> genTerm False s []
 
+-- TODO Implement shrinking
+
 mutateName :: Name -> Gen Name
 mutateName (Name v) = fmap (Name . (v+) . getPositive) arbitrary
 
