@@ -29,6 +29,7 @@ library
     Language.Embedded.Eval
     Language.Embedded.Algorithms
     Language.Embedded.Testing
+    Language.Embedded.SimpleCodeMotion
 
   hs-source-dirs:
     src
