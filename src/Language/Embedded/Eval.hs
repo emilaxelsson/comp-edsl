@@ -162,7 +162,7 @@ semTreeS_a_a_a p f a b = SemTree $ do
     Dict <- typeEq ta tb
     return $ EF $ (Sym (Sem f) :$ a' :$ b') :&: ta
 
--- | General implementation of 'semTreeS' for construct of type @p a => a -> B@
+-- | General implementation of 'semTreeS' for construct of type @p a => a -> a -> B@
 semTreeS_a_a_B :: forall t p atts q a b
     .  ( TypeEq t t
        , PWitness p t t
