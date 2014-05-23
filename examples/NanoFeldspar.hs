@@ -23,7 +23,9 @@ import qualified Prelude
 
 import qualified Data.Syntactic as S
 
-import Language.Embedded
+import Language.Embedded hiding (showAST, drawAST, writeHtmlAST)
+import qualified Language.Embedded as EDSL
+import Language.Embedded.SimpleCodeMotion
 
 
 
@@ -135,6 +137,24 @@ instance Type a => Syntactic (Data a)
 -- | Specialization of the 'Syntactic' class for Feldspar
 class    (Syntactic a, SimpleType (Internal a), PF a ~ FeldF) => Syntax a
 instance (Syntactic a, SimpleType (Internal a), PF a ~ FeldF) => Syntax a
+
+
+
+--------------------------------------------------------------------------------
+-- * "Backends"
+--------------------------------------------------------------------------------
+
+-- | Show the syntax tree using unicode art
+showAST :: (Syntactic a, PF a ~ FeldF) => a -> String
+showAST = showTerm . codeMotion0 (const True) . desugar'
+
+-- | Draw the syntax tree on the terminal using unicode art
+drawAST :: (Syntactic a, PF a ~ FeldF) => a -> IO ()
+drawAST = putStrLn . showAST
+
+-- | Write the syntax tree to an HTML file with foldable nodes
+writeHtmlAST :: (Syntactic a, PF a ~ FeldF) => a -> IO ()
+writeHtmlAST = EDSL.writeHtmlAST "tree.html" . desugar
 
 
 
