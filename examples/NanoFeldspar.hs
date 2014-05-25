@@ -21,6 +21,9 @@ import Prelude hiding
     )
 import qualified Prelude
 
+import Control.Applicative
+
+import Data.Syntactic (EF (..))
 import qualified Data.Syntactic as S
 
 import Language.Embedded hiding (showAST, drawAST, writeHtmlAST)
@@ -162,64 +165,64 @@ writeHtmlAST = EDSL.writeHtmlAST "tree.html" . desugar
 -- * Evaluation
 ----------------------------------------------------------------------------------------------------
 
--- | 'semOf' specialized to Feldspar
-semOfFeld = semOfT (Proxy :: Proxy FeldTypes)
+-- | 'cexpOf' specialized to Feldspar
+cexpOfFeld = cexpOfT (Proxy :: Proxy FeldTypes)
 
-instance SemTreeAG NUM FeldTypes
+instance CompileAG NUM FeldTypes
   where
-    semTreeS (Abs a)   = semTreeS_a_a pNum abs a
-    semTreeS (Sign a)  = semTreeS_a_a pNum signum a
-    semTreeS (Add a b) = semTreeS_a_a_a pNum (+) a b
-    semTreeS (Sub a b) = semTreeS_a_a_a pNum (-) a b
-    semTreeS (Mul a b) = semTreeS_a_a_a pNum (*) a b
+    compileS (Abs a)   = compileS_a_a pNum abs a
+    compileS (Sign a)  = compileS_a_a pNum signum a
+    compileS (Add a b) = compileS_a_a_a pNum (+) a b
+    compileS (Sub a b) = compileS_a_a_a pNum (-) a b
+    compileS (Mul a b) = compileS_a_a_a pNum (*) a b
 
-instance SemTreeAG ORD FeldTypes
+instance CompileAG ORD FeldTypes
   where
-    semTreeS (LTH a b) = semTreeS_a_a_B pOrd (Prelude.<) a b
-    semTreeS (GTH a b) = semTreeS_a_a_B pOrd (Prelude.>) a b
-    semTreeS (LTE a b) = semTreeS_a_a_B pOrd (Prelude.<=) a b
-    semTreeS (GTE a b) = semTreeS_a_a_B pOrd (Prelude.>=) a b
-    semTreeS (Min a b) = semTreeS_a_a_a pOrd Prelude.min a b
-    semTreeS (Max a b) = semTreeS_a_a_a pOrd Prelude.max a b
+    compileS (LTH a b) = compileS_a_a_B pOrd (Prelude.<) a b
+    compileS (GTH a b) = compileS_a_a_B pOrd (Prelude.>) a b
+    compileS (LTE a b) = compileS_a_a_B pOrd (Prelude.<=) a b
+    compileS (GTE a b) = compileS_a_a_B pOrd (Prelude.>=) a b
+    compileS (Min a b) = compileS_a_a_a pOrd Prelude.min a b
+    compileS (Max a b) = compileS_a_a_a pOrd Prelude.max a b
 
-instance SemTreeAG Array FeldTypes
+instance CompileAG Array FeldTypes
   where
     -- getIx :: [a] -> Index -> a
-    semTreeS (GetIx a i) = SemTree $ do
-        EF (a' :&: ta) <- semOfFeld a
-        EF (i' :&: ti) <- semOfFeld i
-        [E telem]      <- matchConM ta
-        Dict           <- typeEq ta (listType telem)
-        Dict           <- typeEq ti intType
-        return $ EF $ (Sym (Sem (!!)) :$ a' :$ i') :&: telem
+    compileS (GetIx a i) = do
+        CExp ta a' <- cexpOfFeld a
+        CExp ti i' <- cexpOfFeld i
+        [E telem]  <- matchConM ta
+        Dict       <- typeEq ta (listType telem)
+        Dict       <- typeEq ti intType
+        return $ CExp telem $ (!!) <$> a' <*> i'
     -- arrLen :: [a] -> Length
-    semTreeS (ArrLen a) = SemTree $ do
-        EF (a' :&: ta) <- semOfFeld a
-        [E telem]      <- matchConM ta
-        Dict           <- typeEq ta (listType telem)
-        return $ EF $ (Sym (Sem Prelude.length) :$ a') :&: intType
+    compileS (ArrLen a) = do
+        CExp ta a' <- cexpOfFeld a
+        [E telem]  <- matchConM ta
+        Dict       <- typeEq ta (listType telem)
+        return $ CExp intType $ Prelude.length <$> a'
     -- parallel :: Length -> (Index -> a) -> [a]
     --
     -- parallel :: ( tf ~ (Index -> ta)
     --             , tl ~ Length
     --             )
     --          => tl -> tf -> [ta]
-    semTreeS (Parallel l f) = SemTree $ do
-        EF (l' :&: tl) <- semOfFeld l
-        EF (f' :&: tf) <- semOfFeld f
-        [_, E ta]      <- matchConM tf
-        Dict           <- typeEq tf (funType intType ta)
-        Dict           <- typeEq tl intType
-        return $ EF $ (Sym (Sem parallelSem) :$ l' :$ f') :&: listType ta
+    compileS (Parallel l f) = do
+        CExp tl l' <- cexpOfFeld l
+        CExp tf f' <- cexpOfFeld f
+        [_, E ta]  <- matchConM tf
+        Dict       <- typeEq tf (funType intType ta)
+        Dict       <- typeEq tl intType
+        return $ CExp (listType ta) $ parallelSem <$> l' <*> f'
       where
         parallelSem l ixf = Prelude.take l $ Prelude.map ixf [0..]
 
-    semTreeI (Parallel l ixf)
+    compileI (Parallel l ixf)
         | [i] <- argsOf ixf
         = ixf |-> Env ((i, EF intType) : getEnv)
-    semTreeI _ = o
+    compileI _ = o
 
-instance SemTreeAG ForLoop FeldTypes
+instance CompileAG ForLoop FeldTypes
   where
     -- forLoop :: Length -> s -> (Index -> s -> s) -> s
     --
@@ -227,18 +230,18 @@ instance SemTreeAG ForLoop FeldTypes
     --            , tstep  ~ (Index -> (tinit -> tinit))
     --            )
     --         => tl -> tinit -> tstep -> tinit
-    semTreeS (ForLoop l init step) = SemTree $ do
-        EF (l'    :&: tl)    <- semOfFeld l
-        EF (init' :&: tinit) <- semOfFeld init
-        EF (step' :&: tstep) <- semOfFeld step
-        Dict <- typeEq tl intType
-        Dict <- typeEq tstep (funType intType (funType tinit tinit))
-        return $ EF $ (Sym (Sem forSem) :$ l' :$ init' :$ step') :&: tinit
+    compileS (ForLoop l init step) = do
+        CExp tl    l'    <- cexpOfFeld l
+        CExp tinit init' <- cexpOfFeld init
+        CExp tstep step' <- cexpOfFeld step
+        Dict             <- typeEq tl intType
+        Dict             <- typeEq tstep (funType intType (funType tinit tinit))
+        return $ CExp tinit $ forSem <$> l' <*> init' <*> step'
       where
         forSem 0 init _    = init  -- Needed when length is unsigned
         forSem l init step = foldl (flip step) init [0..l-1]
 
-    semTreeI (ForLoop _ init step)
+    compileI (ForLoop _ init step)
         | [i,s] <- argsOf step
         = step |-> Env ((i, EF intType) : (s, typeOf init) : getEnv)
 

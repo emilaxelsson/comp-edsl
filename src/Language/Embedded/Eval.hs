@@ -1,34 +1,36 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | Attribute grammars for constructing semantic trees
+-- | Attribute grammars for typed compilation
+-- (see "Typing Dynamic Typing" (Baars and Swierstra, ICFP 2002))
 
 module Language.Embedded.Eval
-    ( -- * Things related to semantic trees in Syntactic
-      module Data.Syntactic
-    , module Data.Syntactic.TypeUniverse
-    , module Data.Syntactic.Functional
-      -- * Constructing semantic trees
-    , SemTree (..)
-    , semOf
-    , semOfT
+    ( -- * Type universes
+      module Data.Syntactic.TypeUniverse
+      -- * Typed compilation
+    , CExp (..)
+    , cexpOf
+    , cexpOfT
     , typeOf
-    , SemTreeAG (..)
-    , semTree
+    , CompileAG (..)
+    , compile
     , evalTop
-    , semTreeS_A_A
-    , semTreeS_A_A_A
-    , semTreeS_a_a
-    , semTreeS_a_a_a
-    , semTreeS_a_a_B
+    , compileS_A_A
+    , compileS_A_A_A
+    , compileS_a_a
+    , compileS_a_a_a
+    , compileS_a_a_B
     ) where
 
 
 
-import Data.Syntactic (AST (..), (:&:) (..), E (..), EF (..))
+import Control.Applicative
+import Data.Maybe (fromJust)
+
+import Data.Syntactic (EF (..))
+import Data.Syntactic.Functional (EvalEnv)
 import qualified Data.Syntactic as S
 import Data.Syntactic.TypeUniverse
-import Data.Syntactic.Functional (Sem (..), EvalEnv, evalSem)
 
 import Language.Embedded.Syntax
 import Language.Embedded.AG
@@ -36,52 +38,52 @@ import Language.Embedded.Constructs
 
 
 
--- | Semantic tree attribute
-newtype SemTree t = SemTree { unSemTree :: Maybe (EF (AST (Sem t) :&: TypeRep t)) }
+-- | Compiled expression attribute
+data CExp t where
+    CExp :: TypeRep t a -> (EvalEnv t -> a) -> CExp t
 
--- | Get the 'SemTree' attribute
-semOf :: (?below :: a -> q, SemTree t :< q) => a -> Maybe (EF (AST (Sem t) :&: TypeRep t))
-semOf = unSemTree . below
+-- | Get the 'CExp' attribute
+cexpOf :: (?below :: a -> q, Maybe (CExp t) :< q) => a -> Maybe (CExp t)
+cexpOf = below
 
--- | Get the 'SemTree' attribute; fix the type variable by a 'Proxy'
-semOfT :: (?below :: a -> q, SemTree t :< q) =>
-    Proxy t -> a -> Maybe (EF (AST (Sem t) :&: TypeRep t))
-semOfT _ = unSemTree . below
+-- | Get the 'CExp' attribute; fix the type variable by a 'Proxy'
+cexpOfT :: (?below :: a -> q, Maybe (CExp t) :< q) => Proxy t -> a -> Maybe (CExp t)
+cexpOfT _ = below
 
--- | Get the type of a 'SemTree' attribute
-typeOf :: (?below :: a -> q, SemTree t :< q) => a -> EF (TR t)
-typeOf a = case semOf a of
-    Just (EF (_ :&: TypeRep t)) -> EF t
+-- | Get the type of a 'CExp' attribute
+typeOf :: (?below :: a -> q, Maybe (CExp t) :< q) => a -> EF (TR t)
+typeOf a = case cexpOf a of
+    Just (CExp (TypeRep t) _) -> EF t
 
--- | Attribute grammar for constructing semantic trees
-class SemTreeAG f t
+-- | Attribute grammar for compiling expressions
+class CompileAG f t
   where
-    -- | Synthesize the 'SemTree' attribute
-    semTreeS :: (Env (EF (TR t)) :< atts) => Syn f atts (SemTree t)
+    -- | Synthesize the 'CExp' attribute
+    compileS :: (Env (EF (TR t)) :< atts) => Syn f atts (Maybe (CExp t))
 
-    -- | Compute the inherited type environment for constructing a semantic tree
-    semTreeI :: (SemTree t :< atts, Args :< atts) => Inh f atts (Env (EF (TR t)))
-    semTreeI _ = o
+    -- | Compute the inherited type environment for typed compilation
+    compileI :: (Maybe (CExp t) :< atts, Args :< atts) => Inh f atts (Env (EF (TR t)))
+    compileI _ = o
 
--- | Construct a semantic tree from a term
-semTree :: forall f t
-    .  ( SemTreeAG f t
+-- | Typed compilation
+compile :: forall f t
+    .  ( CompileAG f t
        , Traversable f
        , Binding :<: f
        )
     => [(Name, EF (TR t))]
     -> Term f
-    -> Maybe (EF (AST (Sem t) :&: TypeRep t))
-semTree env = unSemTree . fst . runAG (semTreeS |*| argsS) semTreeI' (Env env)
+    -> Maybe (CExp t)
+compile env = fst . runAG (compileS |*| argsS) compileI' (Env env)
   where
-    semTreeI' :: Inh' f ((SemTree t, Args), Env (EF (TR t))) (Env (EF (TR t)))
-    semTreeI' = semTreeI
+    compileI' :: Inh' f ((Maybe (CExp t), Args), Env (EF (TR t))) (Env (EF (TR t)))
+    compileI' = compileI
       -- Why needed?
 
--- | Evaluate a term using a semantic tree
+-- | Evaluate a term using typed compilation
 evalTop :: forall f t a
     .  ( Typeable t a
-       , SemTreeAG f t
+       , CompileAG f t
        , Traversable f
        , Binding :<: f
        , FunType S.:<: t
@@ -97,146 +99,149 @@ evalTop _ e = go e typeRep []
         , Just Dict      <- typeEq t (funType ta tb)
         = \a -> go b tb ((v, Dyn ta a) : env)
     go e te env
-        | Just (EF (s :&: t)) <- semTree env' e
-        , Just Dict           <- typeEq t te
-        = evalSem env s
+        | Just (CExp t c) <- compile env' e
+        , Just Dict       <- typeEq t te
+        = c env
       where
         env' = [(v, EF t) | (v, Dyn (TypeRep t) _) <- env]
 
--- | General implementation of 'semTreeS' for construct of type @A -> B@
-semTreeS_A_A :: forall t atts q a b
+-- | General implementation of 'compileS' for construct of type @A -> B@
+compileS_A_A :: forall t atts q a b
     .  ( TypeEq t t
        , ?below :: atts -> q
-       , SemTree t :< q
+       , Maybe (CExp t) :< q
        , Typeable t a
        , Typeable t b
        )
-    => (a -> b) -> atts -> SemTree t
-semTreeS_A_A f a = SemTree $ do
-    EF (a' :&: ta) <- semOfT (Proxy :: Proxy t) a
+    => (a -> b) -> atts -> Maybe (CExp t)
+compileS_A_A f a = do
+    CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
     Dict <- typeEq ta (typeRep :: TypeRep t a)
-    return $ EF $ (Sym (Sem f) :$ a') :&: typeRep
+    return $ CExp typeRep $ f <$> a'
 
--- | General implementation of 'semTreeS' for construct of type @A -> B -> C@
-semTreeS_A_A_A :: forall t atts q a b c
+-- | General implementation of 'compileS' for construct of type @A -> B -> C@
+compileS_A_A_A :: forall t atts q a b c
     .  ( TypeEq t t
        , ?below :: atts -> q
-       , SemTree t :< q
+       , Maybe (CExp t) :< q
        , Typeable t a
        , Typeable t b
        , Typeable t c
        )
-    => (a -> b -> c) -> atts -> atts -> SemTree t
-semTreeS_A_A_A f a b = SemTree $ do
-    EF (a' :&: ta) <- semOfT (Proxy :: Proxy t) a
-    EF (b' :&: tb) <- semOfT (Proxy :: Proxy t) b
-    Dict <- typeEq ta (typeRep :: TypeRep t a)
-    Dict <- typeEq tb (typeRep :: TypeRep t b)
-    return $ EF $ (Sym (Sem f) :$ a' :$ b') :&: typeRep
+    => (a -> b -> c) -> atts -> atts -> Maybe (CExp t)
+compileS_A_A_A f a b = do
+    CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
+    CExp tb b' <- cexpOfT (Proxy :: Proxy t) b
+    Dict       <- typeEq ta (typeRep :: TypeRep t a)
+    Dict       <- typeEq tb (typeRep :: TypeRep t b)
+    return $ CExp typeRep $ f <$> a' <*> b'
 
--- | General implementation of 'semTreeS' for construct of type @p a => a -> a@
-semTreeS_a_a :: forall t p a q
+-- | General implementation of 'compileS' for construct of type @p a => a -> a@
+compileS_a_a :: forall t p a q
     .  ( TypeEq t t
        , PWitness p t t
        , ?below :: a -> q
-       , SemTree t :< q
+       , Maybe (CExp t) :< q
        )
-    => Proxy p -> (forall a . p a => a -> a) -> a -> SemTree t
-semTreeS_a_a p f a = SemTree $ do
-    EF (a' :&: ta) <- semOfT (Proxy :: Proxy t) a
-    Dict <- pwit p ta
-    return $ EF $ (Sym (Sem f) :$ a') :&: ta
+    => Proxy p -> (forall a . p a => a -> a) -> a -> Maybe (CExp t)
+compileS_a_a p f a = do
+    CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
+    Dict       <- pwit p ta
+    return $ CExp ta $ f <$> a'
 
--- | General implementation of 'semTreeS' for construct of type @p a => a -> a -> a@
-semTreeS_a_a_a :: forall t p a q
+-- | General implementation of 'compileS' for construct of type @p a => a -> a -> a@
+compileS_a_a_a :: forall t p a q
     .  ( TypeEq t t
        , PWitness p t t
        , ?below :: a -> q
-       , SemTree t :< q
+       , Maybe (CExp t) :< q
        )
-    => Proxy p -> (forall a . p a => a -> a -> a) -> a -> a -> SemTree t
-semTreeS_a_a_a p f a b = SemTree $ do
-    EF (a' :&: ta) <- semOfT (Proxy :: Proxy t) a
-    EF (b' :&: tb) <- semOfT (Proxy :: Proxy t) b
-    Dict <- pwit p ta
-    Dict <- typeEq ta tb
-    return $ EF $ (Sym (Sem f) :$ a' :$ b') :&: ta
+    => Proxy p -> (forall a . p a => a -> a -> a) -> a -> a -> Maybe (CExp t)
+compileS_a_a_a p f a b = do
+    CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
+    CExp tb b' <- cexpOfT (Proxy :: Proxy t) b
+    Dict       <- pwit p ta
+    Dict       <- typeEq ta tb
+    return $ CExp ta $ f <$> a' <*> b'
 
--- | General implementation of 'semTreeS' for construct of type @p a => a -> a -> B@
-semTreeS_a_a_B :: forall t p atts q a b
+-- | General implementation of 'compileS' for construct of type @p a => a -> a -> B@
+compileS_a_a_B :: forall t p atts q a b
     .  ( TypeEq t t
        , PWitness p t t
        , ?below :: atts -> q
-       , SemTree t :< q
+       , Maybe (CExp t) :< q
        , Typeable t b
        )
-    => Proxy p -> (forall a . p a => a -> a -> b) -> atts -> atts -> SemTree t
-semTreeS_a_a_B p f a b = SemTree $ do
-    EF (a' :&: ta) <- semOfT (Proxy :: Proxy t) a
-    EF (b' :&: tb) <- semOfT (Proxy :: Proxy t) b
-    Dict <- pwit p ta
-    Dict <- typeEq ta tb
-    return $ EF $ (Sym (Sem f) :$ a' :$ b') :&: typeRep
+    => Proxy p -> (forall a . p a => a -> a -> b) -> atts -> atts -> Maybe (CExp t)
+compileS_a_a_B p f a b = do
+    CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
+    CExp tb b' <- cexpOfT (Proxy :: Proxy t) b
+    Dict       <- pwit p ta
+    Dict       <- typeEq ta tb
+    return $ CExp typeRep $ f <$> a' <*> b'
 
-instance (SemTreeAG f t, SemTreeAG g t) => SemTreeAG (f :+: g) t
+instance (CompileAG f t, CompileAG g t) => CompileAG (f :+: g) t
   where
-    semTreeS (Inl f) = semTreeS f
-    semTreeS (Inr f) = semTreeS f
-    semTreeI (Inl f) = semTreeI f
-    semTreeI (Inr f) = semTreeI f
+    compileS (Inl f) = compileS f
+    compileS (Inr f) = compileS f
+    compileI (Inl f) = compileI f
+    compileI (Inr f) = compileI f
 
-instance (FunType S.:<: t) => SemTreeAG Binding t
+instance (FunType S.:<: t, TypeEq t t) => CompileAG Binding t
   where
-    semTreeS (Var v) = SemTree $ do
+    compileS (Var v) = do
         EF t <- lookEnv v
-        return $ EF $ Sym (SemVar (TypeRep t) v) :&: TypeRep t
-    semTreeS (Lam v b) = SemTree $ do
-        EF (b' :&: tb) <- semOf b
-        EF ta          <- lookEnv v
-        return $ EF $ (Sym (SemLam (TypeRep ta) v) :$ b') :&: funType (TypeRep ta) tb
+        return $ CExp (TypeRep t) $ \env -> fromJust $ do
+            Dyn t' a <- lookup v env
+            Dict     <- typeEq (TypeRep t) t'
+            return a
+    compileS (Lam v b) = do
+        CExp tb b' <- cexpOf b
+        EF ta      <- lookEnv v
+        return $ CExp (funType (TypeRep ta) tb) $ \env -> \a -> b' ((v, Dyn (TypeRep ta) a):env)
 
-instance (FunType S.:<: t, TypeEq t t) => SemTreeAG Let t
+instance (FunType S.:<: t, TypeEq t t) => CompileAG Let t
   where
     -- let :: a -> (a -> b) -> b
-    semTreeS (Let a f) = SemTree $ do
-        EF (a' :&: ta) <- semOfT (Proxy :: Proxy t) a
-        EF (f' :&: tf) <- semOfT (Proxy :: Proxy t) f
-        [_, E tb]      <- matchConM tf
-        Dict           <- typeEq tf (funType ta tb)
-        return $ EF $ (Sym (Sem (flip ($))) :$ a' :$ f') :&: tb
+    compileS (Let a f) = do
+        CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
+        CExp tf f' <- cexpOfT (Proxy :: Proxy t) f
+        [_, E tb]  <- matchConM tf
+        Dict       <- typeEq tf (funType ta tb)
+        return $ CExp tb $ (flip ($)) <$> a' <*> f'
 
-    semTreeI (Let a f)
+    compileI (Let a f)
         | [v] <- argsOf f
         = f |-> Env ((v, typeOf a) : getEnv)
 
-instance (FunType S.:<: t, TypeEq t t) => SemTreeAG App t
+instance (FunType S.:<: t, TypeEq t t) => CompileAG App t
   where
     -- let :: (a -> b) -> a -> b
-    semTreeS (App f a) = SemTree $ do
-        EF (f' :&: tf) <- semOfT (Proxy :: Proxy t) f
-        EF (a' :&: ta) <- semOfT (Proxy :: Proxy t) a
-        [_, E tb]      <- matchConM tf
-        Dict           <- typeEq tf (funType ta tb)
-        return $ EF $ (Sym (Sem ($)) :$ f' :$ a') :&: tb
+    compileS (App f a) = do
+        CExp tf f' <- cexpOfT (Proxy :: Proxy t) f
+        CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
+        [_, E tb]  <- matchConM tf
+        Dict       <- typeEq tf (funType ta tb)
+        return $ CExp tb $ ($) <$> f' <*> a'
 
-    semTreeI (App f a)
+    compileI (App f a)
         | [v] <- argsOf f
         = f |-> Env ((v, typeOf a) : getEnv)
 
-instance SubUniverse tLit t => SemTreeAG (Lit tLit) t
+instance SubUniverse tLit t => CompileAG (Lit tLit) t
   where
-    semTreeS (Lit (Dyn ta a)) = SemTree $ Just $ EF $ Sym (Sem a) :&: weakenUniverse ta
+    compileS (Lit (Dyn ta a)) = Just $ CExp (weakenUniverse ta) $ \_ -> a
 
-instance (BoolType S.:<: t, TypeEq t t) => SemTreeAG Cond t
+instance (BoolType S.:<: t, TypeEq t t) => CompileAG Cond t
   where
     -- cond :: Bool -> a -> a -> a
-    semTreeS (Cond c t f) = SemTree $ do
-        EF (c' :&: tc) <- semOfT (Proxy :: Proxy t) c
-        EF (t' :&: tt) <- semOfT (Proxy :: Proxy t) t
-        EF (f' :&: tf) <- semOfT (Proxy :: Proxy t) f
-        Dict <- typeEq tc boolType
-        Dict <- typeEq tt tf
-        return $ EF $ (Sym (Sem iff) :$ c' :$ t' :$ f') :&: tt
+    compileS (Cond c t f) = do
+        CExp tc c' <- cexpOfT (Proxy :: Proxy t) c
+        CExp tt t' <- cexpOfT (Proxy :: Proxy t) t
+        CExp tf f' <- cexpOfT (Proxy :: Proxy t) f
+        Dict       <- typeEq tc boolType
+        Dict       <- typeEq tt tf
+        return $ CExp tt $ iff <$> c' <*> t' <*> f'
       where
         iff c t f = if c then t else f
 
