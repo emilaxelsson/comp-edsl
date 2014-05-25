@@ -65,11 +65,11 @@ genTerm closed s env = frequency
       )
     , (freqVar, do
             v <- pickVar 5 freqFree env
-            return $ inject $ Var v
+            return $ Term $ Inl $ Var v
       )
     , (1, do
             v <- pickVar 1 2 env
-            fmap (inject . Lam v) $ genTerm closed (s-1) (v:env)
+            fmap (Term . Inl . Lam v) $ genTerm closed (s-1) (v:env)
       )
     ]
   where
