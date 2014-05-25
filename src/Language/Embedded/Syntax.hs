@@ -45,7 +45,9 @@ module Language.Embedded.Syntax
     , Context
     , simpCxt
     , (:+:) (..)
-    , (:<:) (..)
+    , (:<:)
+    , inj
+    , proj
     , inject
     , project
     , Alg
