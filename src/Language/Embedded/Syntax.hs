@@ -157,6 +157,9 @@ instance
 
 -- | \"Syntactic sugar\" -- types that can be converted to and from 'TERM'
 --
+-- For details, see "Combining Deep and Shallow Embedding for EDSL"
+-- (TFP 2013, <http://www.cse.chalmers.se/~emax/documents/svenningsson2013combining.pdf>).
+--
 -- It is usually assumed that @(`desugar` (`sugar` a))@ has the same meaning as @a@.
 class Syntactic a
   where
