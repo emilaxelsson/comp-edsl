@@ -165,39 +165,36 @@ writeHtmlAST = EDSL.writeHtmlAST "tree.html" . desugar
 -- * Evaluation
 ----------------------------------------------------------------------------------------------------
 
--- | 'cexpOf' specialized to Feldspar
-cexpOfFeld = cexpOfT (Proxy :: Proxy FeldTypes)
-
-instance CompileAG NUM FeldTypes
+instance Compile NUM FeldTypes
   where
-    compileS (Abs a)   = compileS_a_a pNum abs a
-    compileS (Sign a)  = compileS_a_a pNum signum a
-    compileS (Add a b) = compileS_a_a_a pNum (+) a b
-    compileS (Sub a b) = compileS_a_a_a pNum (-) a b
-    compileS (Mul a b) = compileS_a_a_a pNum (*) a b
+    compileAlg (Abs a)   = compileAlg_a_a pNum abs a
+    compileAlg (Sign a)  = compileAlg_a_a pNum signum a
+    compileAlg (Add a b) = compileAlg_a_a_a pNum (+) a b
+    compileAlg (Sub a b) = compileAlg_a_a_a pNum (-) a b
+    compileAlg (Mul a b) = compileAlg_a_a_a pNum (*) a b
 
-instance CompileAG ORD FeldTypes
+instance Compile ORD FeldTypes
   where
-    compileS (LTH a b) = compileS_a_a_B pOrd (Prelude.<) a b
-    compileS (GTH a b) = compileS_a_a_B pOrd (Prelude.>) a b
-    compileS (LTE a b) = compileS_a_a_B pOrd (Prelude.<=) a b
-    compileS (GTE a b) = compileS_a_a_B pOrd (Prelude.>=) a b
-    compileS (Min a b) = compileS_a_a_a pOrd Prelude.min a b
-    compileS (Max a b) = compileS_a_a_a pOrd Prelude.max a b
+    compileAlg (LTH a b) = compileAlg_a_a_B pOrd (Prelude.<) a b
+    compileAlg (GTH a b) = compileAlg_a_a_B pOrd (Prelude.>) a b
+    compileAlg (LTE a b) = compileAlg_a_a_B pOrd (Prelude.<=) a b
+    compileAlg (GTE a b) = compileAlg_a_a_B pOrd (Prelude.>=) a b
+    compileAlg (Min a b) = compileAlg_a_a_a pOrd Prelude.min a b
+    compileAlg (Max a b) = compileAlg_a_a_a pOrd Prelude.max a b
 
-instance CompileAG Array FeldTypes
+instance Compile Array FeldTypes
   where
     -- getIx :: [a] -> Index -> a
-    compileS (GetIx a i) = do
-        CExp ta a' <- cexpOfFeld a
-        CExp ti i' <- cexpOfFeld i
+    compileAlg (GetIx a i) _ cenv = do
+        CExp ta a' <- a [] cenv
+        CExp ti i' <- i [] cenv
         [E telem]  <- matchConM ta
         Dict       <- typeEq ta (listType telem)
         Dict       <- typeEq ti intType
         return $ CExp telem $ (!!) <$> a' <*> i'
     -- arrLen :: [a] -> Length
-    compileS (ArrLen a) = do
-        CExp ta a' <- cexpOfFeld a
+    compileAlg (ArrLen a) _ cenv = do
+        CExp ta a' <- a [] cenv
         [E telem]  <- matchConM ta
         Dict       <- typeEq ta (listType telem)
         return $ CExp intType $ Prelude.length <$> a'
@@ -207,9 +204,9 @@ instance CompileAG Array FeldTypes
     --             , tl ~ Length
     --             )
     --          => tl -> tf -> [ta]
-    compileS (Parallel l f) = do
-        CExp tl l' <- cexpOfFeld l
-        CExp tf f' <- cexpOfFeld f
+    compileAlg (Parallel l f) _ cenv = do
+        CExp tl l' <- l [] cenv
+        CExp tf f' <- f [EF intType] cenv
         [_, E ta]  <- matchConM tf
         Dict       <- typeEq tf (funType intType ta)
         Dict       <- typeEq tl intType
@@ -217,12 +214,7 @@ instance CompileAG Array FeldTypes
       where
         parallelSem l ixf = Prelude.take l $ Prelude.map ixf [0..]
 
-    compileI (Parallel l ixf)
-        | [i] <- argsOf ixf
-        = ixf |-> Env ((i, EF intType) : getEnv)
-    compileI _ = o
-
-instance CompileAG ForLoop FeldTypes
+instance Compile ForLoop FeldTypes
   where
     -- forLoop :: Length -> s -> (Index -> s -> s) -> s
     --
@@ -230,20 +222,16 @@ instance CompileAG ForLoop FeldTypes
     --            , tstep  ~ (Index -> (tinit -> tinit))
     --            )
     --         => tl -> tinit -> tstep -> tinit
-    compileS (ForLoop l init step) = do
-        CExp tl    l'    <- cexpOfFeld l
-        CExp tinit init' <- cexpOfFeld init
-        CExp tstep step' <- cexpOfFeld step
+    compileAlg (ForLoop l init step) _ cenv = do
+        CExp tl    l'    <- l [] cenv
+        CExp tinit init' <- init [] cenv
+        CExp tstep step' <- step [EF intType, EF (unTypeRep tinit)] cenv
         Dict             <- typeEq tl intType
         Dict             <- typeEq tstep (funType intType (funType tinit tinit))
         return $ CExp tinit $ forSem <$> l' <*> init' <*> step'
       where
         forSem 0 init _    = init  -- Needed when length is unsigned
         forSem l init step = foldl (flip step) init [0..l-1]
-
-    compileI (ForLoop _ init step)
-        | [i,s] <- argsOf step
-        = step |-> Env ((i, EF intType) : (s, typeOf init) : getEnv)
 
 eval :: (Syntactic a, PF a ~ FeldF, Typeable FeldTypes (Internal a)) => a -> Internal a
 eval = evalTop (Proxy :: Proxy FeldTypes) . desugar'

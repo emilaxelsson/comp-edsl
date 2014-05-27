@@ -9,17 +9,14 @@ module Language.Embedded.Eval
       module Data.Syntactic.TypeUniverse
       -- * Typed compilation
     , CExp (..)
-    , cexpOf
-    , cexpOfT
-    , typeOf
-    , CompileAG (..)
+    , Compile (..)
     , compile
     , evalTop
-    , compileS_A_A
-    , compileS_A_A_A
-    , compileS_a_a
-    , compileS_a_a_a
-    , compileS_a_a_B
+    , compileAlg_A_B
+    , compileAlg_A_B_C
+    , compileAlg_a_a
+    , compileAlg_a_a_a
+    , compileAlg_a_a_B
     ) where
 
 
@@ -28,7 +25,6 @@ import Control.Applicative
 import Data.Maybe (fromJust)
 
 import Data.Syntactic (EF (..))
-import Data.Syntactic.Functional (EvalEnv)
 import qualified Data.Syntactic as S
 import Data.Syntactic.TypeUniverse
 
@@ -38,52 +34,29 @@ import Language.Embedded.Constructs
 
 
 
+type EvalEnv t = [(Name, Dynamic t)]
+
 -- | Compiled expression attribute
 data CExp t where
     CExp :: TypeRep t a -> (EvalEnv t -> a) -> CExp t
 
--- | Get the 'CExp' attribute
-cexpOf :: (?below :: a -> q, Maybe (CExp t) :< q) => a -> Maybe (CExp t)
-cexpOf = below
-
--- | Get the 'CExp' attribute; fix the type variable by a 'Proxy'
-cexpOfT :: (?below :: a -> q, Maybe (CExp t) :< q) => Proxy t -> a -> Maybe (CExp t)
-cexpOfT _ = below
-
--- | Get the type of a 'CExp' attribute
-typeOf :: (?below :: a -> q, Maybe (CExp t) :< q) => a -> EF (TR t)
-typeOf a = case cexpOf a of
-    Just (CExp (TypeRep t) _) -> EF t
+type CompileEnv t = [EF (TR t)] -> [(Name, EF (TR t))] -> Maybe (CExp t)
 
 -- | Attribute grammar for compiling expressions
-class CompileAG f t
+class Compile f t
   where
     -- | Synthesize the 'CExp' attribute
-    compileS :: (Env (EF (TR t)) :< atts) => Syn f atts (Maybe (CExp t))
-
-    -- | Compute the inherited type environment for typed compilation
-    compileI :: (Maybe (CExp t) :< atts, Args :< atts) => Inh f atts (Env (EF (TR t)))
-    compileI _ = o
+    compileAlg :: Alg f (CompileEnv t)
 
 -- | Typed compilation
-compile :: forall f t
-    .  ( CompileAG f t
-       , Traversable f
-       , Binding :<: f
-       )
-    => [(Name, EF (TR t))]
-    -> Term f
-    -> Maybe (CExp t)
-compile env = fst . runAG (compileS |*| argsS) compileI' (Env env)
-  where
-    compileI' :: Inh' f ((Maybe (CExp t), Args), Env (EF (TR t))) (Env (EF (TR t)))
-    compileI' = compileI
-      -- Why needed?
+compile :: forall f t . (Compile f t, Traversable f, Binding :<: f) =>
+    [(Name, EF (TR t))] -> Term f -> Maybe (CExp t)
+compile cenv t = cata compileAlg t [] cenv
 
 -- | Evaluate a term using typed compilation
 evalTop :: forall f t a
     .  ( Typeable t a
-       , CompileAG f t
+       , Compile f t
        , Traversable f
        , Binding :<: f
        , FunType S.:<: t
@@ -105,140 +78,110 @@ evalTop _ e = go e typeRep []
       where
         env' = [(v, EF t) | (v, Dyn (TypeRep t) _) <- env]
 
--- | General implementation of 'compileS' for construct of type @A -> B@
-compileS_A_A :: forall t atts q a b
+-- | General implementation of 'compileAlg' for construct of type @A -> B@
+compileAlg_A_B :: forall t a b
     .  ( TypeEq t t
-       , ?below :: atts -> q
-       , Maybe (CExp t) :< q
        , Typeable t a
        , Typeable t b
        )
-    => (a -> b) -> atts -> Maybe (CExp t)
-compileS_A_A f a = do
-    CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
-    Dict <- typeEq ta (typeRep :: TypeRep t a)
+    => (a -> b) -> CompileEnv t -> CompileEnv t
+compileAlg_A_B f a _ cenv = do
+    CExp ta a' <- a [] cenv
+    Dict       <- typeEq ta (typeRep :: TypeRep t a)
     return $ CExp typeRep $ f <$> a'
 
--- | General implementation of 'compileS' for construct of type @A -> B -> C@
-compileS_A_A_A :: forall t atts q a b c
+-- | General implementation of 'compileAlg' for construct of type @A -> B -> C@
+compileAlg_A_B_C :: forall t a b c
     .  ( TypeEq t t
-       , ?below :: atts -> q
-       , Maybe (CExp t) :< q
        , Typeable t a
        , Typeable t b
        , Typeable t c
        )
-    => (a -> b -> c) -> atts -> atts -> Maybe (CExp t)
-compileS_A_A_A f a b = do
-    CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
-    CExp tb b' <- cexpOfT (Proxy :: Proxy t) b
+    => (a -> b -> c) -> CompileEnv t -> CompileEnv t -> CompileEnv t
+compileAlg_A_B_C f a b _ cenv = do
+    CExp ta a' <- a [] cenv
+    CExp tb b' <- b [] cenv
     Dict       <- typeEq ta (typeRep :: TypeRep t a)
     Dict       <- typeEq tb (typeRep :: TypeRep t b)
     return $ CExp typeRep $ f <$> a' <*> b'
 
--- | General implementation of 'compileS' for construct of type @p a => a -> a@
-compileS_a_a :: forall t p a q
-    .  ( TypeEq t t
-       , PWitness p t t
-       , ?below :: a -> q
-       , Maybe (CExp t) :< q
-       )
-    => Proxy p -> (forall a . p a => a -> a) -> a -> Maybe (CExp t)
-compileS_a_a p f a = do
-    CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
+-- | General implementation of 'compileAlg' for construct of type @p a => a -> a@
+compileAlg_a_a :: PWitness p t t =>
+    Proxy p -> (forall a . p a => a -> a) -> CompileEnv t -> CompileEnv t
+compileAlg_a_a p f a _ cenv = do
+    CExp ta a' <- a [] cenv
     Dict       <- pwit p ta
     return $ CExp ta $ f <$> a'
 
--- | General implementation of 'compileS' for construct of type @p a => a -> a -> a@
-compileS_a_a_a :: forall t p a q
-    .  ( TypeEq t t
-       , PWitness p t t
-       , ?below :: a -> q
-       , Maybe (CExp t) :< q
-       )
-    => Proxy p -> (forall a . p a => a -> a -> a) -> a -> a -> Maybe (CExp t)
-compileS_a_a_a p f a b = do
-    CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
-    CExp tb b' <- cexpOfT (Proxy :: Proxy t) b
-    Dict       <- pwit p ta
+-- | General implementation of 'compileAlg' for construct of type @p a => a -> a -> a@
+compileAlg_a_a_a :: (TypeEq t t, PWitness p t t) =>
+    Proxy p -> (forall a . p a => a -> a -> a) -> CompileEnv t -> CompileEnv t -> CompileEnv t
+compileAlg_a_a_a p f a b _ cenv = do
+    CExp ta a' <- a [] cenv
+    CExp tb b' <- b [] cenv
     Dict       <- typeEq ta tb
+    Dict       <- pwit p ta
     return $ CExp ta $ f <$> a' <*> b'
 
--- | General implementation of 'compileS' for construct of type @p a => a -> a -> B@
-compileS_a_a_B :: forall t p atts q a b
-    .  ( TypeEq t t
-       , PWitness p t t
-       , ?below :: atts -> q
-       , Maybe (CExp t) :< q
-       , Typeable t b
-       )
-    => Proxy p -> (forall a . p a => a -> a -> b) -> atts -> atts -> Maybe (CExp t)
-compileS_a_a_B p f a b = do
-    CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
-    CExp tb b' <- cexpOfT (Proxy :: Proxy t) b
+-- | General implementation of 'compileAlg' for construct of type @p a => a -> a -> B@
+compileAlg_a_a_B :: (TypeEq t t, PWitness p t t, Typeable t b) =>
+    Proxy p -> (forall a . p a => a -> a -> b) -> CompileEnv t -> CompileEnv t -> CompileEnv t
+compileAlg_a_a_B p f a b _ cenv = do
+    CExp ta a' <- a [] cenv
+    CExp tb b' <- b [] cenv
     Dict       <- pwit p ta
     Dict       <- typeEq ta tb
     return $ CExp typeRep $ f <$> a' <*> b'
 
-instance (CompileAG f t, CompileAG g t) => CompileAG (f :+: g) t
+instance (Compile f t, Compile g t) => Compile (f :+: g) t
   where
-    compileS (Inl f) = compileS f
-    compileS (Inr f) = compileS f
-    compileI (Inl f) = compileI f
-    compileI (Inr f) = compileI f
+    compileAlg (Inl f) = compileAlg f
+    compileAlg (Inr f) = compileAlg f
 
-instance (FunType S.:<: t, TypeEq t t) => CompileAG Binding t
+instance (FunType S.:<: t, TypeEq t t) => Compile Binding t
   where
-    compileS (Var v) = do
-        EF t <- lookEnv v
+    compileAlg (Var v) _ cenv = do
+        EF t <- lookup v cenv
         return $ CExp (TypeRep t) $ \env -> fromJust $ do
             Dyn t' a <- lookup v env
             Dict     <- typeEq (TypeRep t) t'
             return a
-    compileS (Lam v b) = do
-        CExp tb b' <- cexpOf b
-        EF ta      <- lookEnv v
-        return $ CExp (funType (TypeRep ta) tb) $ \env -> \a -> b' ((v, Dyn (TypeRep ta) a):env)
+    compileAlg (Lam v b) (EF t : aenv) cenv = do
+        CExp tb b' <- b aenv ((v, EF t) : cenv)
+        return $ CExp (funType (TypeRep t) tb) $
+            \env -> \a -> b' ((v, Dyn (TypeRep t) a):env)
 
-instance (FunType S.:<: t, TypeEq t t) => CompileAG Let t
+instance (FunType S.:<: t, TypeEq t t) => Compile Let t
   where
     -- let :: a -> (a -> b) -> b
-    compileS (Let a f) = do
-        CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
-        CExp tf f' <- cexpOfT (Proxy :: Proxy t) f
+    compileAlg (Let a f) _ cenv = do
+        CExp ta a' <- a [] cenv
+        CExp tf f' <- f [EF (unTypeRep ta)] cenv
         [_, E tb]  <- matchConM tf
         Dict       <- typeEq tf (funType ta tb)
         return $ CExp tb $ (flip ($)) <$> a' <*> f'
 
-    compileI (Let a f)
-        | [v] <- argsOf f
-        = f |-> Env ((v, typeOf a) : getEnv)
-
-instance (FunType S.:<: t, TypeEq t t) => CompileAG App t
+instance (FunType S.:<: t, TypeEq t t) => Compile App t
   where
-    -- let :: (a -> b) -> a -> b
-    compileS (App f a) = do
-        CExp tf f' <- cexpOfT (Proxy :: Proxy t) f
-        CExp ta a' <- cexpOfT (Proxy :: Proxy t) a
+    -- let :: a -> (a -> b) -> b
+    compileAlg (App f a) _ cenv = do
+        CExp ta a' <- a [] cenv
+        CExp tf f' <- f [EF (unTypeRep ta)] cenv
         [_, E tb]  <- matchConM tf
         Dict       <- typeEq tf (funType ta tb)
         return $ CExp tb $ ($) <$> f' <*> a'
 
-    compileI (App f a)
-        | [v] <- argsOf f
-        = f |-> Env ((v, typeOf a) : getEnv)
-
-instance SubUniverse tLit t => CompileAG (Lit tLit) t
+instance SubUniverse tLit t => Compile (Lit tLit) t
   where
-    compileS (Lit (Dyn ta a)) = Just $ CExp (weakenUniverse ta) $ \_ -> a
+    compileAlg (Lit (Dyn ta a)) _ _ = Just $ CExp (weakenUniverse ta) $ \_ -> a
 
-instance (BoolType S.:<: t, TypeEq t t) => CompileAG Cond t
+instance (BoolType S.:<: t, TypeEq t t) => Compile Cond t
   where
     -- cond :: Bool -> a -> a -> a
-    compileS (Cond c t f) = do
-        CExp tc c' <- cexpOfT (Proxy :: Proxy t) c
-        CExp tt t' <- cexpOfT (Proxy :: Proxy t) t
-        CExp tf f' <- cexpOfT (Proxy :: Proxy t) f
+    compileAlg (Cond c t f) _ cenv = do
+        CExp tc c' <- c [] cenv
+        CExp tt t' <- t [] cenv
+        CExp tf f' <- f [] cenv
         Dict       <- typeEq tc boolType
         Dict       <- typeEq tt tf
         return $ CExp tt $ iff <$> c' <*> t' <*> f'
