@@ -32,18 +32,30 @@ import Language.Embedded.Constructs
 
 
 
-type EvalEnv t = [(Name, Dynamic t)]
+-- | Run-time environment (the values of variables in scope)
+type RunEnv t = [(Name, Dynamic t)]
 
 -- | Compiled expression
+--
+-- The first argument to `CExp` is a representation of the result type, and the second argument is a
+-- function that computes an @a@ given a runtime environment.
 data CExp t where
-    CExp :: TypeRep t a -> (EvalEnv t -> a) -> CExp t
+    CExp :: TypeRep t a -> (RunEnv t -> a) -> CExp t
 
-type CompileEnv t = [E (TypeRep t)] -> [(Name, E (TypeRep t))] -> Maybe (CExp t)
+-- | An expression compiler parameterized on its compile-time environment. Note that as the compiler
+-- does not take an expression as argument, it must be specialized for a specific expression.
+--
+-- The first argument gives the types of all arguments of the expression to compile. For example,
+-- if the expression is @\a -> \b -> c@, then the list should contain (at least) two elements which
+-- are taken to be the types of @a@ and @b@ (in that order).
+--
+-- The second argument gives the types of variables in scope.
+type Compiler t = [E (TypeRep t)] -> [(Name, E (TypeRep t))] -> Maybe (CExp t)
 
 -- | Algebra for compiling expressions
 class Compile f t
   where
-    compileAlg :: Alg f (CompileEnv t)
+    compileAlg :: Alg f (Compiler t)
 
 -- | Typed compilation
 compile :: forall f t . (Compile f t, Traversable f, Binding :<: f) =>
@@ -62,7 +74,7 @@ evalTop :: forall f t a
     => Proxy t -> Term f -> a
 evalTop _ e = go e typeRep []
   where
-    go :: Term f -> TypeRep t b -> EvalEnv t -> b
+    go :: Term f -> TypeRep t b -> RunEnv t -> b
     go e t env  -- This case handles top-level lambdas
         | Just (Lam v b) <- project e
         , [E ta, E tb]   <- matchCon t
@@ -76,12 +88,8 @@ evalTop _ e = go e typeRep []
         env' = [(v, E t) | (v, Dyn t _) <- env]
 
 -- | General implementation of 'compileAlg' for construct of type @A -> B@
-compileAlg_A_B :: forall t a b
-    .  ( TypeEq t t
-       , Typeable t a
-       , Typeable t b
-       )
-    => (a -> b) -> CompileEnv t -> CompileEnv t
+compileAlg_A_B :: forall t a b . (TypeEq t t, Typeable t a, Typeable t b) =>
+    (a -> b) -> Compiler t -> Compiler t
 compileAlg_A_B f a _ cenv = do
     CExp ta a' <- a [] cenv
     Dict       <- typeEq ta (typeRep :: TypeRep t a)
@@ -94,7 +102,7 @@ compileAlg_A_B_C :: forall t a b c
        , Typeable t b
        , Typeable t c
        )
-    => (a -> b -> c) -> CompileEnv t -> CompileEnv t -> CompileEnv t
+    => (a -> b -> c) -> Compiler t -> Compiler t -> Compiler t
 compileAlg_A_B_C f a b _ cenv = do
     CExp ta a' <- a [] cenv
     CExp tb b' <- b [] cenv
@@ -104,7 +112,7 @@ compileAlg_A_B_C f a b _ cenv = do
 
 -- | General implementation of 'compileAlg' for construct of type @p a => a -> a@
 compileAlg_a_a :: PWitness p t t =>
-    Proxy p -> (forall a . p a => a -> a) -> CompileEnv t -> CompileEnv t
+    Proxy p -> (forall a . p a => a -> a) -> Compiler t -> Compiler t
 compileAlg_a_a p f a _ cenv = do
     CExp ta a' <- a [] cenv
     Dict       <- pwit p ta
@@ -112,7 +120,7 @@ compileAlg_a_a p f a _ cenv = do
 
 -- | General implementation of 'compileAlg' for construct of type @p a => a -> a -> a@
 compileAlg_a_a_a :: (TypeEq t t, PWitness p t t) =>
-    Proxy p -> (forall a . p a => a -> a -> a) -> CompileEnv t -> CompileEnv t -> CompileEnv t
+    Proxy p -> (forall a . p a => a -> a -> a) -> Compiler t -> Compiler t -> Compiler t
 compileAlg_a_a_a p f a b _ cenv = do
     CExp ta a' <- a [] cenv
     CExp tb b' <- b [] cenv
@@ -122,7 +130,7 @@ compileAlg_a_a_a p f a b _ cenv = do
 
 -- | General implementation of 'compileAlg' for construct of type @p a => a -> a -> B@
 compileAlg_a_a_B :: (TypeEq t t, PWitness p t t, Typeable t b) =>
-    Proxy p -> (forall a . p a => a -> a -> b) -> CompileEnv t -> CompileEnv t -> CompileEnv t
+    Proxy p -> (forall a . p a => a -> a -> b) -> Compiler t -> Compiler t -> Compiler t
 compileAlg_a_a_B p f a b _ cenv = do
     CExp ta a' <- a [] cenv
     CExp tb b' <- b [] cenv
