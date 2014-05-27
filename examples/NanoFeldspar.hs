@@ -23,7 +23,6 @@ import qualified Prelude
 
 import Control.Applicative
 
-import Data.Syntactic (EF (..))
 import qualified Data.Syntactic as S
 
 import Language.Embedded hiding (showAST, drawAST, writeHtmlAST)
@@ -206,7 +205,7 @@ instance Compile Array FeldTypes
     --          => tl -> tf -> [ta]
     compileAlg (Parallel l f) _ cenv = do
         CExp tl l' <- l [] cenv
-        CExp tf f' <- f [EF intType] cenv
+        CExp tf f' <- f [E intType] cenv
         [_, E ta]  <- matchConM tf
         Dict       <- typeEq tf (funType intType ta)
         Dict       <- typeEq tl intType
@@ -225,7 +224,7 @@ instance Compile ForLoop FeldTypes
     compileAlg (ForLoop l init step) _ cenv = do
         CExp tl    l'    <- l [] cenv
         CExp tinit init' <- init [] cenv
-        CExp tstep step' <- step [EF intType, EF (unTypeRep tinit)] cenv
+        CExp tstep step' <- step [E intType, E tinit] cenv
         Dict             <- typeEq tl intType
         Dict             <- typeEq tstep (funType intType (funType tinit tinit))
         return $ CExp tinit $ forSem <$> l' <*> init' <*> step'

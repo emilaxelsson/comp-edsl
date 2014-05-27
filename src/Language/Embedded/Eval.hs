@@ -23,7 +23,6 @@ module Language.Embedded.Eval
 import Control.Applicative
 import Data.Maybe (fromJust)
 
-import Data.Syntactic (EF (..))
 import qualified Data.Syntactic as S
 import Data.Syntactic.TypeUniverse
 
@@ -39,7 +38,7 @@ type EvalEnv t = [(Name, Dynamic t)]
 data CExp t where
     CExp :: TypeRep t a -> (EvalEnv t -> a) -> CExp t
 
-type CompileEnv t = [EF (TR t)] -> [(Name, EF (TR t))] -> Maybe (CExp t)
+type CompileEnv t = [E (TypeRep t)] -> [(Name, E (TypeRep t))] -> Maybe (CExp t)
 
 -- | Algebra for compiling expressions
 class Compile f t
@@ -48,7 +47,7 @@ class Compile f t
 
 -- | Typed compilation
 compile :: forall f t . (Compile f t, Traversable f, Binding :<: f) =>
-    [(Name, EF (TR t))] -> Term f -> Maybe (CExp t)
+    [(Name, E (TypeRep t))] -> Term f -> Maybe (CExp t)
 compile cenv t = cata compileAlg t [] cenv
 
 -- | Evaluate a term using typed compilation
@@ -74,7 +73,7 @@ evalTop _ e = go e typeRep []
         , Just Dict       <- typeEq t te
         = c env
       where
-        env' = [(v, EF t) | (v, Dyn (TypeRep t) _) <- env]
+        env' = [(v, E t) | (v, Dyn t _) <- env]
 
 -- | General implementation of 'compileAlg' for construct of type @A -> B@
 compileAlg_A_B :: forall t a b
@@ -139,22 +138,22 @@ instance (Compile f t, Compile g t) => Compile (f :+: g) t
 instance (FunType S.:<: t, TypeEq t t) => Compile Binding t
   where
     compileAlg (Var v) _ cenv = do
-        EF t <- lookup v cenv
-        return $ CExp (TypeRep t) $ \env -> fromJust $ do
+        E t <- lookup v cenv
+        return $ CExp t $ \env -> fromJust $ do
             Dyn t' a <- lookup v env
-            Dict     <- typeEq (TypeRep t) t'
+            Dict     <- typeEq t t'
             return a
-    compileAlg (Lam v b) (EF t : aenv) cenv = do
-        CExp tb b' <- b aenv ((v, EF t) : cenv)
-        return $ CExp (funType (TypeRep t) tb) $
-            \env -> \a -> b' ((v, Dyn (TypeRep t) a):env)
+    compileAlg (Lam v b) (E t : aenv) cenv = do
+        CExp tb b' <- b aenv ((v, E t) : cenv)
+        return $ CExp (funType t tb) $
+            \env -> \a -> b' ((v, Dyn t a):env)
 
 instance (FunType S.:<: t, TypeEq t t) => Compile Let t
   where
     -- let :: a -> (a -> b) -> b
     compileAlg (Let a f) _ cenv = do
         CExp ta a' <- a [] cenv
-        CExp tf f' <- f [EF (unTypeRep ta)] cenv
+        CExp tf f' <- f [E ta] cenv
         [_, E tb]  <- matchConM tf
         Dict       <- typeEq tf (funType ta tb)
         return $ CExp tb $ (flip ($)) <$> a' <*> f'
@@ -164,7 +163,7 @@ instance (FunType S.:<: t, TypeEq t t) => Compile App t
     -- let :: a -> (a -> b) -> b
     compileAlg (App f a) _ cenv = do
         CExp ta a' <- a [] cenv
-        CExp tf f' <- f [EF (unTypeRep ta)] cenv
+        CExp tf f' <- f [E ta] cenv
         [_, E tb]  <- matchConM tf
         Dict       <- typeEq tf (funType ta tb)
         return $ CExp tb $ ($) <$> f' <*> a'
