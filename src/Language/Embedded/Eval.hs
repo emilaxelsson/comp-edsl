@@ -1,8 +1,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | Attribute grammars for typed compilation
--- (see "Typing Dynamic Typing" (Baars and Swierstra, ICFP 2002))
+-- | Typed compilation (see "Typing Dynamic Typing" (Baars and Swierstra, ICFP 2002))
 
 module Language.Embedded.Eval
     ( -- * Type universes
@@ -36,16 +35,15 @@ import Language.Embedded.Constructs
 
 type EvalEnv t = [(Name, Dynamic t)]
 
--- | Compiled expression attribute
+-- | Compiled expression
 data CExp t where
     CExp :: TypeRep t a -> (EvalEnv t -> a) -> CExp t
 
 type CompileEnv t = [EF (TR t)] -> [(Name, EF (TR t))] -> Maybe (CExp t)
 
--- | Attribute grammar for compiling expressions
+-- | Algebra for compiling expressions
 class Compile f t
   where
-    -- | Synthesize the 'CExp' attribute
     compileAlg :: Alg f (CompileEnv t)
 
 -- | Typed compilation
