@@ -2,6 +2,8 @@ name:           compass
 version:        0.1
 synopsis:       A library for creating Deeply embedded DSLs in Haskell
 description:    A library for creating Deeply embedded DSLs in Haskell
+                .
+                Compass might stand for "Compositional Abstract Syntax and Semantics".
 homepage:       https://github.com/emilaxelsson/compass
 bug-reports:    https://github.com/emilaxelsson/compass/issues
 license:        BSD3
