@@ -1,7 +1,7 @@
 compass
 =======
 
-[![Build Status](https://travis-ci.org/emilaxelsson/comp-edsl.png)](https://travis-ci.org/emilaxelsson/comp-edsl)
+[![Build Status](https://travis-ci.org/emilaxelsson/compass.png)](https://travis-ci.org/emilaxelsson/compass)
 
 A library for creating Deeply embedded DSLs in Haskell
 

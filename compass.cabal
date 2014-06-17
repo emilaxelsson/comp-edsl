@@ -1,9 +1,9 @@
-name:           comp-edsl
+name:           compass
 version:        0.1
 synopsis:       A library for creating Deeply embedded DSLs in Haskell
 description:    A library for creating Deeply embedded DSLs in Haskell
-homepage:       https://github.com/emilaxelsson/comp-edsl
-bug-reports:    https://github.com/emilaxelsson/comp-edsl/issues
+homepage:       https://github.com/emilaxelsson/compass
+bug-reports:    https://github.com/emilaxelsson/compass/issues
 license:        BSD3
 license-file:   LICENSE
 author:         Emil Axelsson
@@ -81,7 +81,7 @@ test-suite General
     ScopedTypeVariables
 
   build-depends:
-    comp-edsl,
+    compass,
     containers,
     base,
     tasty,
@@ -113,7 +113,7 @@ test-suite NanoFeldspar
     UndecidableInstances
 
   build-depends:
-    comp-edsl,
+    compass,
     base,
     QuickCheck,
     syntactic,
