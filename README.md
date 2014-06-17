@@ -5,4 +5,4 @@ compass
 
 A library for creating Deeply embedded DSLs in Haskell
 
-(Compass == "COMPositonal Syntax And Semantix")
+(Compass = "COMPositonal Syntax And Semantics")
