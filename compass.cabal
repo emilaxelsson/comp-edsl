@@ -71,7 +71,7 @@ library
 test-suite General
   type: exitcode-stdio-1.0
 
-  hs-source-dirs: tests examples
+  hs-source-dirs: tests
 
   main-is: GeneralTests.hs
 
@@ -86,8 +86,8 @@ test-suite General
     compass,
     containers,
     base,
-    tasty,
-    tasty-quickcheck
+    tasty-quickcheck,
+    tasty-th
 
 test-suite NanoFeldspar
   type: exitcode-stdio-1.0
