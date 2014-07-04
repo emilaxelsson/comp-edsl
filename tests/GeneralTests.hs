@@ -1,10 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module General where
-
-
-
 import Control.Monad
 import Data.List
 import qualified Data.Map as Map
