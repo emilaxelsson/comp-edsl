@@ -41,8 +41,9 @@
 module Language.Embedded.Syntax
     ( -- * Term representation
       Cxt (..)
-    , Term
     , Context
+    , Term
+    , unTerm
     , simpCxt
     , (:+:) (..)
     , (:<:)
