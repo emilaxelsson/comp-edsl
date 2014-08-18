@@ -56,12 +56,12 @@ alphaEq' env (Term a) (Term b)
     && all (uncurry (alphaEq' env)) (zip (toList a) (toList b))
 
 -- | Alpha-equivalence
-alphaEq :: (EqF f, Binding :<: f, Functor f, Foldable f) =>  Term f -> Term f -> Bool
+alphaEq :: (EqF f, Binding :<: f, Functor f, Foldable f) => Term f -> Term f -> Bool
 alphaEq = alphaEq' []
 
 -- | Generate an infinite list of fresh names given a list of allocated names
 --
--- The argument is assumed to be sorted and not containing an infinite number of adjacent names.
+-- The argument is assumed to be sorted and not contain an infinite number of adjacent names.
 freshVars :: [Name] -> [Name]
 freshVars as = go 0 as
   where
