@@ -25,7 +25,11 @@ module Language.Embedded.Constructs
 
 
 import Data.Foldable (toList)
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Tree
+
+import Data.Comp.Variables
 
 import Data.Syntactic.TypeUniverse
 import Data.Syntactic.Functional (Name (..))
@@ -54,7 +58,8 @@ instance ShowConstr Construct
   where
     showConstr (Construct c _) = c
 
-instance Render Construct
+instance Render  Construct
+instance HasVars Construct v
 
 -- | Variables and binders
 data Binding a
@@ -76,6 +81,14 @@ instance Render Binding
   where
     stringTreeAlg (Var v) = Node (showVar v) []
     stringTreeAlg (Lam v body) = Node ("Lam " ++ showVar v) [body]
+
+instance HasVars Binding Name
+  where
+    isVar (Var v) = Just v
+    isVar _       = Nothing
+
+    bindsVars (Lam v a) = Map.singleton a (Set.singleton v)
+    bindsVars _         = Map.empty
 
 -- | Get the highest name bound by the first 'Lam' binders at every path from the root. If the term
 -- has /ordered binders/ \[1\], 'maxLam' returns the highest name introduced in the whole term.
@@ -112,7 +125,8 @@ data App a = App a a
 
 derive [makeEqF, makeShowF, makeShowConstr] [''App]
 
-instance Render App
+instance Render  App
+instance HasVars App v
 
 -- | Let binding
 data Let a = Let a a
@@ -125,6 +139,8 @@ instance Render Let
     stringTreeAlg (Let a (Node lam [body]))
         | ("Lam",v) <- splitAt 3 lam = Node ("Let" ++ v) [a,body]
     stringTreeAlg (Let a f) = Node "Let" [a,f]
+
+instance HasVars Let v
 
 instance
     ( Syntactic a
@@ -168,13 +184,16 @@ instance Witness Show t t => ShowConstr (Lit t)
 
 instance Witness Show t t => Render (Lit t)
 
+instance HasVars (Lit t) v
+
 -- | Conditional
 data Cond a = Cond a a a
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 derive [makeEqF, makeShowF, makeShowConstr] [''Cond]
 
-instance Render Cond
+instance Render  Cond
+instance HasVars Cond v
 
 
 
