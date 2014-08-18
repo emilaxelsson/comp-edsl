@@ -12,6 +12,7 @@ module Language.Embedded.Constructs
     , lam
     , App (..)
     , Let (..)
+    , viewLet
     , Lit (..)
     , Cond (..)
     , Args (..)
@@ -141,6 +142,15 @@ instance Render Let
     stringTreeAlg (Let a f) = Node "Let" [a,f]
 
 instance HasVars Let v
+
+-- | Match on a 'Let' constructor
+--
+-- A result @(v,a,b)@ corresponds to the expression @let v = a in b@
+viewLet :: (Binding :<: f, Let :<: f) => Term f -> Maybe (Name, Term f, Term f)
+viewLet t = do
+    Let a lam <- project t
+    Lam v b   <- project lam
+    return (v,a,b)
 
 instance
     ( Syntactic a
