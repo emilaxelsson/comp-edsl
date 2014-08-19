@@ -16,11 +16,27 @@ module Language.Embedded.Sharing where
 
 
 
-import Data.Comp
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 
-import Language.Embedded.Constructs
+import Data.Comp.Number
+
+import Language.Embedded
 
 
+
+getAnn :: (f :&: a) b -> a
+getAnn (f :&: a) = a
+
+dropAnn :: (f :&: a) b -> f b
+dropAnn (f :&: a) = f
+
+instance HasVars f v => HasVars (f :&: a) v
+  where
+    isVar     = isVar . dropAnn
+    bindsVars = bindsVars . dropAnn
 
 -- | A 'DAG' is a term where each node may include a number of local definitions. These definitions
 -- mean the same thing as introducing a sequence of 'Let' nodes (see 'dagToTerm').
@@ -37,34 +53,6 @@ type Defs f = [(Name, DAG f)]
 instance EqF f => EqF (Where f)
   where
     eqF (Where ds1 f1) (Where ds2 f2) = ds1==ds2 && eqF f1 f2
-
--- | Methods for querying a functor that may be a 'Var' or a 'Lam'
-data BindDict f = BindDict
-    { isVar :: forall a . f a -> Maybe Name
-    , isLam :: forall a . f a -> Maybe (Name,a)
-    }
-
--- | Default 'BindDict' implementation
-bindDictDefault :: (Binding :<: f) => BindDict f
-bindDictDefault = BindDict
-    { isVar = \f -> do
-        Var v <- proj f
-        return v
-    , isLam = \f -> do
-        Lam v a <- proj f
-        return (v,a)
-    }
-
--- | 'BindDict' for annotated functors
-bindDictAnn :: BindDict f -> BindDict (f :&: a)
-bindDictAnn bd = BindDict
-    { isVar = \(f :&: _) -> do
-        v <- isVar bd f
-        return v
-    , isLam = \(f :&: _) -> do
-        (v,a) <- isLam bd f
-        return (v,a)
-    }
 
 -- | Convert a 'Defs' list to a chain of let bindings
 defsToTerm :: (Binding :<: f, Let :<: f, Functor f) => Defs f -> Term f -> Term f
@@ -125,26 +113,32 @@ prop_foldWithLet :: (Binding :<: f, Let :<: f, Functor f, Eq a) => (f a -> a) ->
 prop_foldWithLet alg t = foldWithLet alg t == cata alg (inlineLet t)
 
 -- | Expose the top-most constructor in a 'DAG' given an environment of definitions in scope.
+-- It works roughly as follows:
 --
 -- * If the top-most node is a variable that has a definition in scope (either in the environment or
 --   in the local 'Defs' attached to the node), this definition is returned and 'expose'd.
 --
 -- * Otherwise, the local definitions of the node are distributed down to the children, which
 --   ensures that the (call by name) semantics of the 'DAG' is not affected.
-expose :: Functor f => BindDict f -> Defs f -> DAG f -> f (DAG f)
-expose bd env (Term (Where ds f))
-    | Just v <- isVar bd f
+--
+-- This function assumes that variables and binders are exactly those recognized by the methods of
+-- the 'HasVars' class, except for 'Where' which also binds variables.
+expose :: forall f . (HasVars f Name, Traversable f) => Defs f -> DAG f -> f (DAG f)
+expose env (Term (Where ds f))
+    | Just v <- isVar f
     , let ds' = dropWhile ((v /=) . fst) ds  -- Strip irrelevant bindings from `ds`
     , Just t <- lookup v (ds' ++ env)        -- `ds` shadows `env`
     , let ds'' = drop 1 ds'                  -- The part of `ds` that `t` may depend on
-    = expose bd env $ addDefs ds'' t
-expose bd env (Term (Where ds f)) = fmap (addDefs ds) f
+    = expose env $ addDefs ds'' t
+expose env (Term (Where ds f)) = fmap pushDefs fn
+  where
+    fn         = number f
+    pushDefs a = addDefs (filter (boundIn (bindsVars fn) a . fst) ds) $ unNumbered a
 
-getAnn :: (f :&: a) b -> a
-getAnn (f :&: a) = a
-
-dropAnn :: (f :&: a) b -> f b
-dropAnn (f :&: a) = f
+-- | @`boundIn bs a v`@ checks if variable @v@ is bound in sub-term @a@ of a constructor for which
+-- 'bindsVars' returns @bs@.
+boundIn :: Ord a => Map a (Set Name) -> a -> Name -> Bool
+boundIn bs a v = maybe False (\vs -> Set.member v vs) $ Map.lookup a bs
 
 -- | Use a 'DAG' transformer to transform a 'Defs' list
 transDefs

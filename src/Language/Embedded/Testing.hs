@@ -7,11 +7,7 @@ import Data.Foldable (toList)
 import Data.Traversable (traverse)
 import Test.QuickCheck
 
-import Data.Comp.Render
-
 import Language.Embedded
-
-import Debug.Trace
 
 
 
