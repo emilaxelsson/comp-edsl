@@ -55,6 +55,7 @@ module Language.Embedded.Syntax
     , AlgM
     , cata
     , cataM
+    , (:&:) (..)
     , module Data.Comp.Render
     , module Data.Comp.Derive
         -- Exports Foldable and Traversable

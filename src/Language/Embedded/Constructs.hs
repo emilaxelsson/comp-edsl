@@ -5,7 +5,8 @@
 -- | General syntactic language constructs
 
 module Language.Embedded.Constructs
-    ( Name (..)
+    ( HasVars (..)
+    , Name (..)
     , Construct (..)
     , Binding (..)
     , maxLam
