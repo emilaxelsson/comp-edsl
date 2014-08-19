@@ -30,6 +30,7 @@ library
     Language.Embedded.Constructs
     Language.Embedded.Eval
     Language.Embedded.Algorithms
+    Language.Embedded.Sharing
     Language.Embedded.Testing
     Language.Embedded.SimpleCodeMotion
 
