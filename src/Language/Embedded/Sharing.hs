@@ -150,7 +150,7 @@ transDefs trans env ds = foldr (\(v,a) e -> (v, trans e a) : e) env ds
 stripAnnDAG :: Functor f => DAG (f :&: a) -> DAG f
 stripAnnDAG = cata (\(Where ds (f :&: _)) -> Term (Where [(v, stripAnnDAG a) | (v,a) <- ds] f))
 
-alphaEqDAG :: (EqF f, Functor f) => DAG (f :&: a) -> DAG (f :&: a) -> Bool
-alphaEqDAG a b = stripAnnDAG a == stripAnnDAG b
-  -- TODO Use alpha equivalence
+alphaEqDAG :: (EqF f, Binding :<: f, Let :<: f, Functor f, Foldable f) =>
+    DAG (f :&: a) -> DAG (f :&: a) -> Bool
+alphaEqDAG a b = dagToTerm (stripAnnDAG a) `alphaEq` dagToTerm (stripAnnDAG b)
 
