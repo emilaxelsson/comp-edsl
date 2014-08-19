@@ -75,7 +75,8 @@ data NUM a
 
 derive [makeEqF, makeShowF, makeShowConstr] [''NUM]
 
-instance Render NUM
+instance Render  NUM
+instance HasVars NUM v
 
 -- | Primitive functions on ordered data
 data ORD a
@@ -89,7 +90,8 @@ data ORD a
 
 derive [makeEqF, makeShowF, makeShowConstr] [''ORD]
 
-instance Render ORD
+instance Render  ORD
+instance HasVars ORD v
 
 -- | Array manipulation
 data Array a
@@ -100,7 +102,8 @@ data Array a
 
 derive [makeEqF, makeShowF, makeShowConstr] [''Array]
 
-instance Render Array
+instance Render  Array
+instance HasVars Array v
 
 -- | For loop
 data ForLoop a = ForLoop a a a
@@ -108,7 +111,8 @@ data ForLoop a = ForLoop a a a
 
 derive [makeEqF, makeShowF, makeShowConstr] [''ForLoop]
 
-instance Render ForLoop
+instance Render  ForLoop
+instance HasVars ForLoop v
 
 -- | Functor representation of Feldspar constructs
 type FeldF
