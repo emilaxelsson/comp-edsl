@@ -1,8 +1,8 @@
--- | Utilities for working with abstract syntax graphs
+-- | Utilities for working with abstract syntax trees with sharing
 --
--- An abstract syntax graph ('DAG') is essentially an AST with 'Let' binders; however, instead of
--- 'Let', this module uses a functor transformer 'Where' that allows attaching a number of local
--- definitions to each node in an AST.
+-- The type 'DAG' represents ASTs with sharing. It is essentially a normal term with let
+-- binders; however, instead of 'Let', this module uses a functor transformer 'Where' that allows
+-- attaching a number of local definitions to each node in an AST.
 --
 -- The functions 'dagToTerm' and 'termToDAG' go back and forth between terms with 'Where' and 'Let'
 -- for local binders.
@@ -76,13 +76,11 @@ termToDAG t
     = addDefs [(v, termToDAG a)] $ termToDAG b
 termToDAG (Term f) = Term $ Where [] $ fmap termToDAG f
 
--- | 'dagToTerm' is the inverse of 'termToDAG'. The converse only holds if the original 'DAG' does
--- not have any 'Let' nodes (i.e. all bindings are represented using 'Where').
-prop_DAG :: (Binding :<: f, Let :<: f, Functor f, EqF f) => Term f -> Bool
-prop_DAG t = dagToTerm (termToDAG t) == t
-
 -- | Fold a term by treating sharing transparently. The semantics is as if all sharing is inlined,
--- but the implementation avoids duplication.
+-- but the implementation avoids duplication. It may not be a good idea to use 'foldWithLet' to
+-- transform terms, since the substitution of shared terms does not deal with capturing. E.g.
+-- @`foldWithLet` `Term`@ will inline all shared terms, but will generally not preserve the
+-- semantics.
 foldWithLet :: (Binding :<: f, Let :<: f, Functor f) => (f a -> a) -> Term f -> a
 foldWithLet alg = go []
   where
