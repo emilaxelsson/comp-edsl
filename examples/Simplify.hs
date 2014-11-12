@@ -42,6 +42,7 @@ simplify env (Term (Where ds f)) = addDefs ds' $ simplifyUp env' def
 
 simplifyUp :: Defs (FeldF :&: Size) -> DAG (FeldF :&: Size) -> DAG (FeldF :&: Size)
 
+-- a+a  ==>  a*2
 simplifyUp env t
     | Just (Add a' b') <- open env t
     = case () of
@@ -55,6 +56,8 @@ simplifyUp env t
   --      function that looks up free variables in the environment and maybe uses hashing to improve
   --      performance.
 
+-- 0*b  ==>  b
+-- a*0  ==>  a
 simplifyUp env t
     | Just (Mul a' b') <- open env t
     = case () of
