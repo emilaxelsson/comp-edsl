@@ -42,7 +42,7 @@ simplify env (Term (Where ds f)) = addDefs ds' $ simplifyUp env' def
 
 simplifyUp :: Defs (FeldF :&: Size) -> DAG (FeldF :&: Size) -> DAG (FeldF :&: Size)
 
--- a+a  ==>  a*2
+-- a+a  ==>  a*2  (bad rule, but just for illustration)
 simplifyUp env t
     | Just (Add a' b') <- open env t
     = case () of
