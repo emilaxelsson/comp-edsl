@@ -38,44 +38,6 @@ instance HasVars f v => HasVars (f :&: a) v
     isVar     = isVar . dropAnn
     bindsVars = bindsVars . dropAnn
 
--- | A 'DAG' is a term where each node may include a number of local definitions. These definitions
--- mean the same thing as introducing a sequence of 'Let' nodes (see 'dagToTerm').
-type DAG f = Term (Where f)
-
--- | Pair a functor with a 'Defs' list
-data Where f a = Where { whereDefs :: Defs f, whereBody :: f a }
-  deriving (Functor)
-
--- | A sequence of local definitions. Earlier definitions may depend on later ones, and earlier
--- definitions shadow later ones.
-type Defs f = [(Name, DAG f)]
-
-instance EqF f => EqF (Where f)
-  where
-    eqF (Where ds1 f1) (Where ds2 f2) = ds1==ds2 && eqF f1 f2
-
--- | Convert a 'Defs' list to a chain of let bindings
-defsToTerm :: (Binding :<: f, Let :<: f, Functor f) => Defs f -> Term f -> Term f
-defsToTerm []           f = f
-defsToTerm ((v,dag):ds) f = defsToTerm ds $ inject $ Let (dagToTerm dag) $ inject $ Lam v f
-
--- | Defines the meaning of 'DAG' by converting it to a tree with let bindings
-dagToTerm :: (Binding :<: f, Let :<: f, Functor f) => DAG f -> Term f
-dagToTerm (Term (Where ds f)) = defsToTerm ds $ Term $ fmap dagToTerm f
-
--- | Add definitions to the root in a 'DAG'. The existing definitions shadow and may depend on the
--- new ones.
-addDefs :: Defs f -> DAG f -> DAG f
-addDefs ds (Term (Where ds' f)) = Term (Where (ds' ++ ds) f)  -- `ds'` shadows `ds`
-
--- | Convert a 'Term' with let bindings to a 'DAG'. The result does not have any 'Let' bindings even
--- though the type does not enforce this.
-termToDAG :: (Binding :<: f, Let :<: f, Functor f) => Term f -> DAG f
-termToDAG t
-    | Just (v,a,b) <- viewLet t
-    = addDefs [(v, termToDAG a)] $ termToDAG b
-termToDAG (Term f) = Term $ Where [] $ fmap termToDAG f
-
 -- | Fold a term by treating sharing transparently. The semantics is as if all sharing is inlined,
 -- but the implementation avoids duplication.
 --
@@ -98,21 +60,30 @@ foldWithLet alg = go []
       = go ((v, go env a) : env) b
     go env (Term f) = alg $ fmap (go env) f
 
--- | Fold a 'DAG' by treating sharing transparently. The semantics is as if all sharing is inlined,
--- but the implementation avoids duplication.
-foldDAG :: (Binding :<: f, Let :<: f, Functor f) => (f a -> a) -> DAG f -> a
-foldDAG alg = foldWithLet alg . dagToTerm
-
 -- | Inline all 'Let' bindings. Existing variables may get renamed, even when there is no risk of
 -- capturing.
 inlineLet :: (Binding :<: f, Let :<: f, Traversable f) => Term f -> Term f
 inlineLet = foldWithLet Term . renameUnique
   -- Renaming to avoid capturing
 
--- | Inline all 'Where' and 'Let' bindings. Existing variables may get renamed, even when there is
--- no risk of capturing.
-inlineDAG :: (Binding :<: f, Let :<: f, Traversable f) => DAG f -> Term f
-inlineDAG = inlineLet . dagToTerm
+-- | A sequence of local definitions. Earlier definitions may depend on later ones, and earlier
+-- definitions shadow later ones.
+type Defs f = [(Name, Term f)]
+
+-- | Add a number of local binders to a term. Existing binders shadow and may depend on the new
+-- ones. This function is the left inverse of 'splitDefs'.
+addDefs :: (Binding :<: f, Let :<: f, Functor f) => Defs f -> Term f -> Term f
+addDefs []         t = t
+addDefs ((v,a):ds) t = addDefs ds $ inject $ Let a $ inject $ Lam v t
+
+-- | Gather all let bindings at the root of a term. The result is the the local definitions and the
+-- first non-let node. 'addDefs' is the left inverse of this function.
+splitDefs :: (Binding :<: f, Let :<: f, Functor f) => Term f -> (Defs f, Term f)
+splitDefs = go []
+  where
+    go ds t
+        | Just (v,a,b) <- viewLet t = go ((v,a):ds) b
+        | otherwise                 = (ds,t)
 
 -- | Expose the top-most constructor in a 'DAG' given an environment of definitions in scope.
 -- It works roughly as follows:
@@ -125,17 +96,20 @@ inlineDAG = inlineLet . dagToTerm
 --
 -- This function assumes that variables and binders are exactly those recognized by the methods of
 -- the 'HasVars' class, except for 'Where' which also binds variables.
-expose :: (HasVars f Name, Traversable f) => Defs f -> DAG f -> f (DAG f)
-expose env (Term (Where ds f))
+expose :: (HasVars f Name, Binding :<: f, Let :<: f, Traversable f) => Defs f -> Term f -> f (Term f)
+expose env t
     | Just v  <- isVar f
     , let ds'  = dropWhile ((v /=) . fst) ds  -- Strip irrelevant bindings from `ds`
     , Just t  <- lookup v (ds' ++ env)        -- `ds` shadows `env`
     , let ds'' = drop 1 ds'                   -- The part of `ds` that `t` may depend on
     = expose env $ addDefs ds'' t
-expose env (Term (Where ds f)) = fmap pushDefs fn
+        -- TODO This is a bit inefficient because `expose` will immediately apply `splitDefs`
+
+    | otherwise = fmap pushDefs fn
   where
-    fn         = number f
-    pushDefs a = addDefs (filter (not . boundIn (bindsVars fn) a . fst) ds) $ unNumbered a
+    (ds, Term f) = splitDefs t
+    fn           = number f
+    pushDefs a   = addDefs (filter (not . boundIn (bindsVars fn) a . fst) ds) $ unNumbered a
 
 -- | @`boundIn bs a v`@ checks if variable @v@ is bound in sub-term @a@ of a constructor for which
 -- 'bindsVars' returns @bs@.
@@ -144,15 +118,8 @@ boundIn bs a v = maybe False (\vs -> Set.member v vs) $ Map.lookup a bs
 
 -- | Use a 'DAG' transformer to transform a 'Defs' list
 transDefs
-    :: (Defs g -> DAG f  -> DAG g)
+    :: (Defs g -> Term f -> Term g)
     -> (Defs g -> Defs f -> Defs g)
 transDefs trans env ds = foldr (\(v,a) e -> (v, trans e a) : e) env ds
   -- Important to fold from the right, since earlier definitions may depend on later ones
-
-stripAnnDAG :: Functor f => DAG (f :&: a) -> DAG f
-stripAnnDAG = cata (\(Where ds (f :&: _)) -> Term (Where [(v, stripAnnDAG a) | (v,a) <- ds] f))
-
-alphaEqDAG :: (EqF f, Binding :<: f, Let :<: f, Functor f, Foldable f) =>
-    DAG (f :&: a) -> DAG (f :&: a) -> Bool
-alphaEqDAG a b = dagToTerm (stripAnnDAG a) `alphaEq` dagToTerm (stripAnnDAG b)
 
