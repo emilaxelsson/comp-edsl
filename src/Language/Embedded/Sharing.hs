@@ -101,17 +101,16 @@ foldWithLet alg = go []
 foldDAG :: (Binding :<: f, Let :<: f, Functor f) => (f a -> a) -> DAG f -> a
 foldDAG alg = foldWithLet alg . dagToTerm
 
--- | Inline all 'Let' bindings. Corresponds to call by name reduction.
-inlineLet :: (Binding :<: f, Let :<: f, Functor f) => Term f -> Term f
-inlineLet = foldWithLet Term
+-- | Inline all 'Let' bindings. Existing variables may get renamed, even when there is no risk of
+-- capturing.
+inlineLet :: (Binding :<: f, Let :<: f, Traversable f) => Term f -> Term f
+inlineLet = foldWithLet Term . renameUnique
+  -- Renaming to avoid capturing
 
--- | Inline all 'Where' definitions and 'Let' bindings. Corresponds to call by name reduction.
-inlineDAG :: (Binding :<: f, Let :<: f, Functor f) => DAG f -> Term f
-inlineDAG = foldWithLet Term . dagToTerm
-
--- | 'foldWithLet' has the same behavior as 'cata' composed with 'inlineLet'
-prop_foldWithLet :: (Binding :<: f, Let :<: f, Functor f, Eq a) => (f a -> a) -> Term f -> Bool
-prop_foldWithLet alg t = foldWithLet alg t == cata alg (inlineLet t)
+-- | Inline all 'Where' and 'Let' bindings. Existing variables may get renamed, even when there is
+-- no risk of capturing.
+inlineDAG :: (Binding :<: f, Let :<: f, Traversable f) => DAG f -> Term f
+inlineDAG = inlineLet . dagToTerm
 
 -- | Expose the top-most constructor in a 'DAG' given an environment of definitions in scope.
 -- It works roughly as follows:
