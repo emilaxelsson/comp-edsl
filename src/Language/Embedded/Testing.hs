@@ -43,42 +43,45 @@ pickVar b f env = frequency
     ]
 
 genTerm
-    :: (Constructors f, Functor f, Traversable f)
+    :: (Constructors f, Traversable f)
     => Bool    -- ^ Only closed terms?
     -> Int     -- ^ Size
     -> [Name]  -- ^ Variables in scope
     -> Gen (Term (Binding :+: f))
-genTerm _ 0 env
-    = fmap Term
-    $ oneof
-    $ map (return . Inr . fmap (const undefined))
-    $ filter (null . toList) constructors
-genTerm closed s env = frequency
-    [ (1, do
-            c <- oneof $ map (return . Inr) constructors
-            let l = length (toList c)
-            fmap Term $ traverse (\_ -> genTerm closed (s `mod` l) env) c
+genTerm closed 0 env = frequency
+    [ (1, fmap Term
+        $ oneof
+        $ map (return . Inr . fmap (const undefined))
+        $ filter (null . toList) constructors
       )
     , (freqVar, do
             v <- pickVar 5 freqFree env
             return $ Term $ Inl $ Var v
       )
-    , (1, do
-            v <- pickVar 1 2 env
-            fmap (Term . Inl . Lam v) $ genTerm closed (s-1) (v:env)
-      )
     ]
   where
-    freqVar  = if closed && null env then 0 else 1
+    freqVar  = if closed && null env then 0 else 4
     freqFree = if closed then 0 else 1
+genTerm closed s env = frequency
+    [ (6, do
+            c <- oneof $ map (return . Inr) $ filter (not . null . toList) constructors
+            let l = length (toList c)
+            fmap Term $ traverse (\_ -> genTerm closed (s `div` l) env) c
+      )
+    , (6, do
+            v <- pickVar 1 3 env
+            fmap (Term . Inl . Lam v) $ genTerm closed (s-1) (v:env)
+      )
+    , (1, genTerm closed 0 env)
+    ]
 
 -- | Generate a possibly open term with many binders and high probability of shadowing
 genClosed :: (Constructors f, Functor f, Traversable f) => Gen (Term (Binding :+: f))
-genClosed = sized $ \s -> genTerm True s []
+genClosed = sized $ \s -> genTerm True (20*s) []
 
 -- | Generate a possibly open term with many binders and high probability of shadowing
 genOpen :: (Constructors f, Functor f, Traversable f) => Gen (Term (Binding :+: f))
-genOpen = sized $ \s -> genTerm False s []
+genOpen = sized $ \s -> genTerm False (20*s) []
 
 -- TODO Implement shrinking
 
