@@ -7,7 +7,10 @@ import Data.Foldable (toList)
 import Data.Traversable (traverse)
 import Test.QuickCheck
 
+import Data.Comp.Ops
+
 import Language.Embedded
+import Language.Embedded.Sharing
 
 
 
@@ -111,4 +114,63 @@ mutateTerm t
                 return $ inject $ Construct c as'
           )
         ]
+
+genLets
+    :: (Constructors f, Traversable f)
+    => Bool    -- ^ Only closed terms?
+    -> Int     -- ^ Size
+    -> [Name]  -- ^ Variables in scope
+    -> Int     -- ^ Number of bindings
+    -> Gen (Term (Binding :+: Let :+: f))
+genLets closed s env 0 = genDAG closed s env
+genLets closed s env n = do
+    a <- genDAG closed (s `div` 2) env
+    v <- pickVar 1 4 env
+    b <- genLets closed (s `div` 2) (v:env) (n-1)
+    return $ Term $ Inr $ Inl $ Let a $ Term $ Inl $ Lam v b
+
+genDAG
+    :: (Constructors f, Functor f, Traversable f)
+    => Bool    -- ^ Only closed terms?
+    -> Int     -- ^ Size
+    -> [Name]  -- ^ Variables in scope
+    -> Gen (Term (Binding :+: Let :+: f))
+genDAG closed 0 env = frequency
+    [ (1, fmap Term
+        $ oneof
+        $ map (return . Inr . Inr . fmap (const undefined))
+        $ filter (null . toList) constructors
+      )
+    , (freqVar, do
+            v <- pickVar 5 freqFree env
+            return $ Term $ Inl $ Var v
+      )
+    ]
+  where
+    freqVar  = if closed && null env then 0 else 4
+    freqFree = if closed then 0 else 1
+genDAG closed s env = frequency
+    [ (2, do
+            c <- oneof $ map (return . Inr . Inr) $ filter (not . null . toList) constructors
+            let l = length (toList c)
+            fmap Term $ traverse (\_ -> genDAG closed (s `div` l) env) c
+      )
+    , (2, do
+            v <- pickVar 1 3 env
+            fmap (Term . Inl . Lam v) $ genDAG closed (s-1) (v:env)
+      )
+    , (2, do
+            n <- choose (1,5)
+            genLets closed s env n
+      )
+    , (1, genDAG closed 0 env)
+    ]
+
+-- | Generate a closed term with many 'Let' binders
+genClosedDAG :: (Constructors f, Traversable f) => Gen (Term (Binding :+: Let :+: f))
+genClosedDAG = sized $ \s -> genDAG True (s*20) []
+
+-- | Generate a possibly open term with many 'Let' binders
+genOpenDAG :: (Constructors f, Traversable f) => Gen (Term (Binding :+: Let :+: f))
+genOpenDAG = sized $ \s -> genDAG False (s*20) []
 
