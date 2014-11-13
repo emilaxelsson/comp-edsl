@@ -1,7 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeOperators #-}
 
 import Control.Monad
+import qualified Data.Foldable as Foldable
 import Data.List
 import qualified Data.Map as Map
 import Data.Maybe
@@ -11,6 +13,7 @@ import Test.Tasty.QuickCheck
 import Test.Tasty.TH
 
 import Language.Embedded
+import Language.Embedded.Sharing
 import Language.Embedded.Testing
 
 
@@ -77,6 +80,27 @@ prop_matchRename2 = forAll genClosed $ \(t :: Term TestSig) -> isJust (match (re
 prop_noMatch =
     forAll genClosed $ \t ->
       forAll (mutateTerm t) $ \tm -> isNothing (match t tm)
+
+-- 'foldWithLet' has the same behavior as 'cata' composed with 'inlineLet'
+prop_foldWithLet = forAll genOpenDAG $ \(t :: Term (Binding :+: Let :+: Construct)) ->
+    foldWithLet alg t == cata alg (inlineLet t)
+  where
+    alg = succ . Foldable.sum
+
+prop_splitDefs_removes_lets =
+    forAll genOpenDAGTop $ \(t :: Term (Binding :+: Let :+: Construct)) ->
+      not $ isJust $ viewLet $ snd $ splitDefs t
+
+prop_splitDefs_addDefs =
+    forAll genOpenDAGTop $ \(t :: Term (Binding :+: Let :+: Construct)) ->
+      uncurry addDefs (splitDefs t) == t
+
+-- | 'expose' does not change the call-by-name semantics
+prop_expose =
+    forAll genDAGEnv $ \(env, t :: Term (Binding :+: Let :+: Construct)) ->
+      inlineLet (addDefs env $ Term $ expose env t) `alphaEq` inlineLet (addDefs env t)
+
+-- TODO Test also that `expose` doesn't return a `Let` or a let-bound variable
 
 main = $defaultMainGenerator
 

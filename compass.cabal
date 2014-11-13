@@ -82,6 +82,8 @@ test-suite General
 
   other-extensions:
     ScopedTypeVariables
+    TemplateHaskell
+    TypeOperators
 
   build-depends:
     compass,

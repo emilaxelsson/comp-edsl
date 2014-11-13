@@ -129,6 +129,7 @@ genLets closed s env n = do
     b <- genLets closed (s `div` 2) (v:env) (n-1)
     return $ Term $ Inr $ Inl $ Let a $ Term $ Inl $ Lam v b
 
+-- | Generate a term with let binders for sharing
 genDAG
     :: (Constructors f, Functor f, Traversable f)
     => Bool    -- ^ Only closed terms?
@@ -173,4 +174,21 @@ genClosedDAG = sized $ \s -> genDAG True (s*20) []
 -- | Generate a possibly open term with many 'Let' binders
 genOpenDAG :: (Constructors f, Traversable f) => Gen (Term (Binding :+: Let :+: f))
 genOpenDAG = sized $ \s -> genDAG False (s*20) []
+
+-- | Like 'genClosedDAG' but with a higher chance of having several let binders at the top
+genClosedDAGTop :: (Constructors f, Traversable f) => Gen (Term (Binding :+: Let :+: f))
+genClosedDAGTop = sized $ \s -> choose (0,15) >>= genLets False (s*20) []
+
+-- | Like 'genOpenDAG' but with a higher chance of having several let binders at the top
+genOpenDAGTop :: (Constructors f, Traversable f) => Gen (Term (Binding :+: Let :+: f))
+genOpenDAGTop = sized $ \s -> choose (0,15) >>= genLets False (s*20) []
+
+-- | Like 'genOpenDAGTop' but generate also an environment of definitions which the term may use
+genDAGEnv :: (Constructors f', Traversable f', Binding :<: f, Let :<: f, f ~ (Binding :+: Let :+: f')) => Gen (Defs f, Term f)
+genDAGEnv = do
+    t <- fmap renameUnique genOpenDAGTop  -- TODO Renaming only needed for prop_expose; remove later
+    let (ds, Term f) = splitDefs t
+    n <- choose (0, length ds)
+    let (ds',env) = splitAt n ds
+    return (env, addDefs ds' (Term f))
 
