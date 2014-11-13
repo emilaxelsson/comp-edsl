@@ -123,17 +123,17 @@ inlineDAG = inlineLet . dagToTerm
 --
 -- This function assumes that variables and binders are exactly those recognized by the methods of
 -- the 'HasVars' class, except for 'Where' which also binds variables.
-expose :: forall f . (HasVars f Name, Traversable f) => Defs f -> DAG f -> f (DAG f)
+expose :: (HasVars f Name, Traversable f) => Defs f -> DAG f -> f (DAG f)
 expose env (Term (Where ds f))
-    | Just v <- isVar f
-    , let ds' = dropWhile ((v /=) . fst) ds  -- Strip irrelevant bindings from `ds`
-    , Just t <- lookup v (ds' ++ env)        -- `ds` shadows `env`
-    , let ds'' = drop 1 ds'                  -- The part of `ds` that `t` may depend on
+    | Just v  <- isVar f
+    , let ds'  = dropWhile ((v /=) . fst) ds  -- Strip irrelevant bindings from `ds`
+    , Just t  <- lookup v (ds' ++ env)        -- `ds` shadows `env`
+    , let ds'' = drop 1 ds'                   -- The part of `ds` that `t` may depend on
     = expose env $ addDefs ds'' t
 expose env (Term (Where ds f)) = fmap pushDefs fn
   where
     fn         = number f
-    pushDefs a = addDefs (filter (boundIn (bindsVars fn) a . fst) ds) $ unNumbered a
+    pushDefs a = addDefs (filter (not . boundIn (bindsVars fn) a . fst) ds) $ unNumbered a
 
 -- | @`boundIn bs a v`@ checks if variable @v@ is bound in sub-term @a@ of a constructor for which
 -- 'bindsVars' returns @bs@.
