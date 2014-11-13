@@ -77,10 +77,12 @@ termToDAG t
 termToDAG (Term f) = Term $ Where [] $ fmap termToDAG f
 
 -- | Fold a term by treating sharing transparently. The semantics is as if all sharing is inlined,
--- but the implementation avoids duplication. It may not be a good idea to use 'foldWithLet' to
--- transform terms, since the substitution of shared terms does not deal with capturing. E.g.
--- @`foldWithLet` `Term`@ will inline all shared terms, but will generally not preserve the
--- semantics.
+-- but the implementation avoids duplication.
+--
+-- It may not be a good idea to use 'foldWithLet' to transform terms, since the substitution of
+-- shared terms does not deal with capturing (only a problem when there are other binders than `Let`
+-- in the term). E.g. @`foldWithLet` `Term`@ will inline all shared terms, but will generally not
+-- preserve the semantics.
 foldWithLet :: (Binding :<: f, Let :<: f, Functor f) => (f a -> a) -> Term f -> a
 foldWithLet alg = go []
   where
@@ -119,7 +121,7 @@ inlineDAG = inlineLet . dagToTerm
 --   in the local 'Defs' attached to the node), this definition is returned and 'expose'd.
 --
 -- * Otherwise, the local definitions of the node are distributed down to the children, which
---   ensures that the (call by name) semantics of the 'DAG' is not affected.
+--   ensures that the (call-by-name) semantics of the 'DAG' is not affected.
 --
 -- This function assumes that variables and binders are exactly those recognized by the methods of
 -- the 'HasVars' class, except for 'Where' which also binds variables.
