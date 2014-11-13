@@ -89,6 +89,9 @@ foldWithLet alg = go []
       , Just a       <- lookup v env
       = a
     go env t
+      | Just (Lam v a) <- project t
+      = alg $ inj $ Lam v $ go (filter ((v/=) . fst) env) a
+    go env t
       | Just (v,a,b) <- viewLet t
       = go ((v, go env a) : env) b
     go env (Term f) = alg $ fmap (go env) f
