@@ -76,6 +76,11 @@ addDefs :: (Binding :<: f, Let :<: f, Functor f) => Defs f -> Term f -> Term f
 addDefs []         t = t
 addDefs ((v,a):ds) t = addDefs ds $ inject $ Let a $ inject $ Lam v t
 
+-- | TODO Remove
+addDefs2 :: (Binding :<: f, Let :<: f, Functor f, f' ~ (f :&: a)) => a -> Defs f' -> Term f' -> Term f'
+addDefs2 ann []         t = t
+addDefs2 ann ((v,a):ds) t = addDefs2 ann ds $ Term $ (:&: ann) $ inj $ Let a $ Term $ (:&: ann) $ inj $ Lam v t
+
 -- | Gather all let bindings at the root of a term. The result is the the local definitions and the
 -- first non-let node. 'addDefs' is the left inverse of this function.
 splitDefs :: (Binding :<: f, Let :<: f, Functor f) => Term f -> (Defs f, Term f)
@@ -84,6 +89,21 @@ splitDefs = go []
     go ds t
         | Just (v,a,b) <- viewLet t = go ((v,a):ds) b
         | otherwise                 = (ds,t)
+
+-- | TODO Remove
+viewLet2 :: (Binding :<: f, Let :<: f, f' ~ (f :&: a)) => Term f' -> Maybe (Name, Term f', Term f')
+viewLet2 (Term (f :&: _)) = do
+    Let a (Term (lam :&: _)) <- proj f
+    Lam v b                  <- proj lam
+    return (v,a,b)
+
+-- | TODO Remove
+splitDefs2 :: (Binding :<: f, Let :<: f, Functor f, f' ~ (f :&: a)) => Term f' -> (Defs f', Term f')
+splitDefs2 = go []
+  where
+    go ds t
+        | Just (v,a,b) <- viewLet2 t = go ((v,a):ds) b
+        | otherwise                  = (ds,t)
 
 -- | Expose the top-most constructor in a 'DAG' given an environment of definitions in scope.
 -- It works roughly as follows:
@@ -110,6 +130,22 @@ expose env t
     (ds, Term f) = splitDefs t
     fn           = number f
     pushDefs a   = addDefs (filter (not . boundIn (bindsVars fn) a . fst) ds) $ unNumbered a
+
+-- | TODO Remove
+expose2 :: (HasVars f Name, Binding :<: f, Let :<: f, Traversable f, f' ~ (f :&: a)) => a -> Defs f' -> Term f' -> f' (Term f')
+expose2 ann env t
+    | Just v  <- isVar f
+    , let ds'  = dropWhile ((v /=) . fst) ds  -- Strip irrelevant bindings from `ds`
+    , Just t  <- lookup v (ds' ++ env)        -- `ds` shadows `env`
+    , let ds'' = drop 1 ds'                   -- The part of `ds` that `t` may depend on
+    = expose2 ann env $ addDefs2 ann ds'' t
+        -- TODO This is a bit inefficient because `expose` will immediately apply `splitDefs`
+
+    | otherwise = fmap pushDefs fn
+  where
+    (ds, Term f) = splitDefs2 t
+    fn           = number f
+    pushDefs a   = addDefs2 ann (filter (not . boundIn (bindsVars fn) a . fst) ds) $ unNumbered a
 
 -- | @`boundIn bs a v`@ checks if variable @v@ is bound in sub-term @a@ of a constructor for which
 -- 'bindsVars' returns @bs@.
