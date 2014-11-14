@@ -66,6 +66,10 @@ inlineLet :: (Binding :<: f, Let :<: f, Traversable f) => Term f -> Term f
 inlineLet = foldWithLet Term . renameUnique
   -- Renaming to avoid capturing
 
+inlineLetEnv :: (Binding :<: f, Let :<: f, Traversable f) => Defs f -> Term f -> Term f
+inlineLetEnv env = foldWithLet Term . renameUnique . addDefs
+  -- TODO This should be the worker of `inlineLet` when reimplemented using the rapier
+
 -- | A sequence of local definitions. Earlier definitions may depend on later ones, and earlier
 -- definitions shadow later ones.
 type Defs f = [(Name, Term f)]

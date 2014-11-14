@@ -98,7 +98,7 @@ prop_splitDefs_addDefs =
 -- | 'expose' does not change the call-by-name semantics
 prop_expose =
     forAll genDAGEnv $ \(env, t :: Term (Binding :+: Let :+: Construct)) ->
-      inlineLet (addDefs env $ Term $ expose env t) `alphaEq` inlineLet (addDefs env t)
+      inlineLetEnv env (Term $ expose env t) `alphaEq` inlineLetEnv env t
 
 -- TODO Test also that `expose` doesn't return a `Let` or a let-bound variable
 
