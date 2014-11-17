@@ -2,7 +2,6 @@
 # and https://raw.githubusercontent.com/haskell-suite/haskell-src-exts/master/.travis.yml
 
 env:
- - GHCVER=7.6.3
  - GHCVER=7.8.2
 
 install:
