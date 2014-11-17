@@ -32,7 +32,7 @@ import Data.Tree
 
 import Data.Comp.Variables
 
-import Data.Syntactic.TypeUniverse
+import Data.TypeRep hiding ((:<:))
 import Data.Syntactic.Functional (Name (..))
 
 import Language.Embedded.Syntax

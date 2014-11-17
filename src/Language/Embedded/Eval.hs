@@ -5,7 +5,7 @@
 
 module Language.Embedded.Eval
     ( -- * Type universes
-      module Data.Syntactic.TypeUniverse
+      module Data.TypeRep
       -- * Typed compilation
     , CExp (..)
     , Compile (..)
@@ -24,7 +24,7 @@ import Control.Applicative
 import Data.Maybe (fromJust)
 
 import qualified Data.Syntactic as S
-import Data.Syntactic.TypeUniverse
+import Data.TypeRep hiding ((:+:), Project (..), (:<:) (..))
 
 import Language.Embedded.Syntax
 import Language.Embedded.AG
