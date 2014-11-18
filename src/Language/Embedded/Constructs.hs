@@ -20,7 +20,6 @@ module Language.Embedded.Constructs
 
 
 import Data.Foldable (toList)
-import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Tree
 
@@ -81,8 +80,8 @@ instance HasVars Binding Name
     isVar (Var v) = Just v
     isVar _       = Nothing
 
-    bindsVars (Lam v a) = Map.singleton a (Set.singleton v)
-    bindsVars _         = Map.empty
+    bindsVars (Lam v a) = a |-> Set.singleton v
+    bindsVars _         = empty
 
 -- | Get the highest name bound by the first 'Lam' binders at every path from the root. If the term
 -- has /ordered binders/ \[1\], 'maxLam' returns the highest name introduced in the whole term.
