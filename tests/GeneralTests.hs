@@ -88,9 +88,14 @@ prop_noMatch =
 
 -- 'foldWithLet' has the same behavior as 'cata' composed with 'inlineLet'
 prop_foldWithLet = forAll genOpenDAG $ \(t :: Term (Binding :+: Let :+: Construct)) ->
-    foldWithLet alg t == cata alg (inlineLet t)
+    foldWithLet alg t == cata alg (inlineAll t)
   where
     alg = succ . Foldable.sum
+
+prop_inline = forAll genOpenDAG $ \(t :: Term (Binding :+: Let :+: Construct)) ->
+    inlineAll t `alphaEq` reference t
+  where
+    reference = foldWithLet Term . renameUnique
 
 prop_splitDefs_removes_lets =
     forAll genOpenDAGTop $ \(t :: Term (Binding :+: Let :+: Construct)) ->
@@ -103,7 +108,12 @@ prop_splitDefs_addDefs =
 -- | 'expose' does not change the call-by-name semantics
 prop_expose =
     forAll genDAGEnv $ \(env, t :: Term (Binding :+: Let :+: Construct)) ->
-      inlineLetEnv env (Term $ expose env t) `alphaEq` inlineLetEnv env t
+      inlineAllEnv' env (Term $ expose env t) `alphaEq` inlineAllEnv' env t
+  where
+    inlineAllEnv' env = foldWithLet Term . renameUnique . addDefs env
+      -- TODO Should be able to use inlineAllEnv instead
+
+
 
 -- TODO Test also that `expose` doesn't return a `Let` or a let-bound variable
 

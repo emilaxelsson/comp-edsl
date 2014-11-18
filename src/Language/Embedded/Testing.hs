@@ -99,7 +99,7 @@ oneHot l = do
 type TestSig = Binding :+: Construct
 
 -- | Adds 1 to all bound variables to give a different term that is quite probable to be alpha
--- equivalent to the first and quite probable to be alpha-inequivalent
+-- equivalent to the first and quite probable to be alpha-inequivalent due to capturing
 shiftVars :: Term TestSig -> Term TestSig
 shiftVars = go []
   where

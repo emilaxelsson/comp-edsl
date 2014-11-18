@@ -84,15 +84,33 @@ foldWithLet alg = go []
       = go ((v, go env a) : env) b
     go env (Term f) = alg $ fmap (go env) f
 
--- | Inline all 'Let' bindings. Existing variables may get renamed, even when there is no risk of
--- capturing.
-inlineLet :: (Binding :<: f, Let :<: f, Traversable f) => Term f -> Term f
-inlineLet = foldWithLet Term . renameUnique
-  -- Renaming to avoid capturing
+inlineAllEnv :: (Binding :<: f, Let :<: f, Traversable f) => Defs f -> Term f -> Term f
+inlineAllEnv env t
+    | Just (Var v) <- project t
+    , Just a       <- lookup v env
+    = a
+inlineAllEnv env t
+    | Just (Lam v a) <- project t
+    , let v'   = succ $ maximum $ (-1:) [v | (_,var) <- env, Just (Var v) <- [project var]]
+    , let env' = (v, inject $ Var v') : env
+    = inject $ Lam v' $ inlineAllEnv env' a
+  where
+inlineAllEnv env t
+      | Just (v,a,b) <- viewLet t
+      = inlineAllEnv ((v, inlineAllEnv env a) : env) b
+inlineAllEnv env (Term f) = Term $ fmap (inlineAllEnv env) f
 
-inlineLetEnv :: (Binding :<: f, Let :<: f, Traversable f) => Defs f -> Term f -> Term f
-inlineLetEnv env = foldWithLet Term . renameUnique . addDefs env
-  -- TODO This should be the worker of `inlineLet` when reimplemented using the rapier
+-- | Inline all let bindings
+--
+-- Uses the "rapier" method described in "Secrets of the Glasgow Haskell Compiler inliner" (Peyton
+-- Jones and Marlow, JFP 2006) to rename variables where there's risk of capturing.
+inlineAll :: (Binding :<: f, Let :<: f, Traversable f) => Term f -> Term f
+inlineAll t = inlineAllEnv init t
+  where
+    v    = maximum $ (-1:) $ Set.toList $ freeVars t
+    init = [(v, inject $ Var v)]
+      -- Insert the highest free variable in the initial environment to make sure that fresh names
+      -- are not used as free variables.
 
 -- | A sequence of local definitions. Earlier definitions may depend on later ones, and earlier
 -- definitions shadow later ones.
