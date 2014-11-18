@@ -98,6 +98,18 @@ oneHot l = do
 
 type TestSig = Binding :+: Construct
 
+-- | Adds 1 to all bound variables to give a different term that is quite probable to be alpha
+-- equivalent to the first and quite probable to be alpha-inequivalent
+shiftVars :: Term TestSig -> Term TestSig
+shiftVars = go []
+  where
+    go env t@(Term f)
+      | Just (Var v) <- project t = case lookup v env of
+          Just v' -> inject $ Var v'
+          _       -> t
+      | Just (Lam v a) <- project t = inject $ Lam (v+1) $ go ((v,v+1):env) a
+      | otherwise = Term $ fmap (go env) f
+
 -- | Mutates a term to get another one that is guaranteed not to be alpha-equivalent
 mutateTerm :: Term TestSig -> Gen (Term TestSig)
 mutateTerm t

@@ -45,7 +45,7 @@ alphaEq' env var1 var2
     | Just (Var v1) <- project var1
     , Just (Var v2) <- project var2
     = case lookup v1 env of
-        Nothing  -> v1==v2   -- Free variables
+        Nothing  -> v1==v2 && null [() | (_,v2') <- env, v2'==v2]   -- Free variables
         Just v2' -> v2==v2'
 alphaEq' env lam1 lam2
     | Just (Lam v1 body1) <- project lam1

@@ -20,6 +20,11 @@ import Language.Embedded.Testing
 
 prop_alphaEqRefl = forAll genClosed $ \(t :: Term TestSig) -> alphaEq t t
 
+prop_alphaEqSymm  = forAll genOpen $ \(t :: Term TestSig) ->
+    let left  = alphaEq t (shiftVars t)
+        right = alphaEq (shiftVars t) t
+    in  collect left (left == right)
+
 prop_notAlphaEq =
     forAll genClosed $ \t ->
       forAll (mutateTerm t) $ \tm -> not (alphaEq t tm)
