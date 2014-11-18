@@ -27,7 +27,6 @@ import qualified Data.Syntactic as S
 import Data.TypeRep hiding ((:+:), Project (..), (:<:) (..))
 
 import Language.Embedded.Syntax
-import Language.Embedded.AG
 import Language.Embedded.Constructs
 
 

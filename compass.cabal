@@ -26,7 +26,6 @@ library
   exposed-modules:
     Language.Embedded
     Language.Embedded.Syntax
-    Language.Embedded.AG
     Language.Embedded.Constructs
     Language.Embedded.Eval
     Language.Embedded.Algorithms
