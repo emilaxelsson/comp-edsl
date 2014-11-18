@@ -16,16 +16,40 @@ module Language.Embedded.Sharing where
 
 
 
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import Data.Comp.Number
+import Data.Comp.Mapping
 
 import Language.Embedded
 
 
+
+----------------------------------------------------------------------
+-- TODO Remove when NumMap gets exported in compdata (also import of IntMap)
+
+newtype NumMap k v = NumMap (IntMap v) deriving Functor
+
+lookupNumMapp :: a -> Int -> NumMap t a -> a
+lookupNumMapp d k (NumMap m) = IntMap.findWithDefault d k m
+
+lookupNumMap' :: Int -> NumMap t a -> Maybe a
+lookupNumMap' k (NumMap m) = IntMap.lookup k m
+
+instance Mapping (NumMap k) (Numbered k) where
+    NumMap m1 & NumMap m2 = NumMap (IntMap.union m1 m2)
+    Numbered k _ |-> v = NumMap $ IntMap.singleton k v
+    empty = NumMap IntMap.empty
+
+    findWithDefault d (Numbered i _) m = lookupNumMapp d i m
+
+    prodMap p q (NumMap mp) (NumMap mq) = NumMap $ IntMap.mergeWithKey merge
+                                          (IntMap.map (\a -> (a,q))) (IntMap.map (\a -> (p,a))) mp mq
+      where merge _ p q = Just (p,q)
+
+----------------------------------------------------------------------
 
 getAnn :: (f :&: a) b -> a
 getAnn (f :&: a) = a
@@ -153,8 +177,8 @@ expose2 ann env t
 
 -- | @`boundIn bs a v`@ checks if variable @v@ is bound in sub-term @a@ of a constructor for which
 -- 'bindsVars' returns @bs@.
-boundIn :: Ord a => Map a (Set Name) -> a -> Name -> Bool
-boundIn bs a v = maybe False (\vs -> Set.member v vs) $ Map.lookup a bs
+boundIn :: NumMap a (Set Name) -> Numbered a -> Name -> Bool
+boundIn bs (Numbered i _) v = maybe False (Set.member v) $ lookupNumMap' i bs
 
 -- | Use a 'DAG' transformer to transform a 'Defs' list
 transDefs
