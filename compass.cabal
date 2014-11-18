@@ -26,7 +26,6 @@ library
   exposed-modules:
     Language.Embedded
     Language.Embedded.Syntax
-    Language.Embedded.AG
     Language.Embedded.Constructs
     Language.Embedded.Eval
     Language.Embedded.Algorithms
@@ -39,9 +38,10 @@ library
 
   build-depends:
     base >= 4.6 && <5.0,
-    compdata >= 0.7,
+    compdata >= 0.9 && < 0.10,
     containers,
     mtl,
+    open-typerep,
     QuickCheck,
     syntactic >= 2.0
 

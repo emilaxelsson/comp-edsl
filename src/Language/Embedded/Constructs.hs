@@ -16,28 +16,20 @@ module Language.Embedded.Constructs
     , viewLet
     , Lit (..)
     , Cond (..)
-    , Args (..)
-    , argsOf
-    , argsS
-    , Env (..)
-    , getEnv
-    , lookEnv
     ) where
 
 
 
 import Data.Foldable (toList)
-import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Tree
 
 import Data.Comp.Variables
 
-import Data.Syntactic.TypeUniverse
+import Data.TypeRep hiding ((:<:))
 import Data.Syntactic.Functional (Name (..))
 
 import Language.Embedded.Syntax
-import Language.Embedded.AG
 
 
 
@@ -89,8 +81,8 @@ instance HasVars Binding Name
     isVar (Var v) = Just v
     isVar _       = Nothing
 
-    bindsVars (Lam v a) = Map.singleton a (Set.singleton v)
-    bindsVars _         = Map.empty
+    bindsVars (Lam v a) = a |-> Set.singleton v
+    bindsVars _         = empty
 
 -- | Get the highest name bound by the first 'Lam' binders at every path from the root. If the term
 -- has /ordered binders/ \[1\], 'maxLam' returns the highest name introduced in the whole term.
@@ -205,37 +197,4 @@ derive [makeEqF, makeShowF, makeShowConstr] [''Cond]
 
 instance Render  Cond
 instance HasVars Cond v
-
-
-
-----------------------------------------------------------------------------------------------------
--- * Attribute grammars
-----------------------------------------------------------------------------------------------------
-
--- | Attribute that lists the immediate bound variables in a term
-newtype Args = Args {unArgs :: [Name]}
-
--- | Get the 'Args' attribute of a term
-argsOf :: (?below :: a -> q, Args :< q) => a -> [Name]
-argsOf = unArgs . below
-
--- | Synthesize the 'Args' attribute of a term
---
--- The variables of immediate 'Lam' nodes will appear in order. If the root is not a 'Lam' the list
--- will be empty.
-argsS :: (Binding :<: f) => Syn f q Args
-argsS f
-    | Just (Lam v b) <- proj f = Args (v : argsOf b)
-    | otherwise = Args []
-
--- | Attribute representing a variable environment
-newtype Env a = Env {unEnv :: [(Name, a)]}
-
--- | Get the 'Env' attribute
-getEnv :: (?above :: q, Env a :< q) => [(Name,a)]
-getEnv = unEnv above
-
--- | Lookup in the 'Env' attribute
-lookEnv :: (?above :: i, Env a :< i) => Name -> Maybe a
-lookEnv v = lookup v getEnv
 
