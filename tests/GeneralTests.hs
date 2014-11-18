@@ -18,7 +18,7 @@ import Language.Embedded.Testing
 
 
 
-prop_alphaEqRefl = forAll genClosed $ \(t :: Term TestSig) -> alphaEq t t
+prop_alphaEqRefl = forAll genOpen $ \(t :: Term TestSig) -> alphaEq t t
 
 prop_alphaEqSymm  = forAll genOpen $ \(t :: Term TestSig) ->
     let left  = alphaEq t (shiftVars t)
@@ -26,7 +26,7 @@ prop_alphaEqSymm  = forAll genOpen $ \(t :: Term TestSig) ->
     in  collect left (left == right)
 
 prop_notAlphaEq =
-    forAll genClosed $ \t ->
+    forAll genOpen $ \t ->
       forAll (mutateTerm t) $ \tm -> not (alphaEq t tm)
 
 prop_freeVars = forAll genClosed $ \(t :: Term TestSig) -> Set.null $ freeVars t
@@ -77,10 +77,10 @@ prop_parSubst =
                   Just sub' = match t t'
               in  Map.fromList sub == Map.fromList sub'
 
-prop_matchRefl = forAll genClosed $ \(t :: Term TestSig) -> isJust (match t t)
+prop_matchRefl = forAll genOpen $ \(t :: Term TestSig) -> isJust (match t t)
 
-prop_matchRename  = forAll genClosed $ \(t :: Term TestSig) -> isJust (match t (renameUnique t))
-prop_matchRename2 = forAll genClosed $ \(t :: Term TestSig) -> isJust (match (renameUnique t) t)
+prop_matchRename  = forAll genOpen $ \(t :: Term TestSig) -> isJust (match t (renameUnique t))
+prop_matchRename2 = forAll genOpen $ \(t :: Term TestSig) -> isJust (match (renameUnique t) t)
 
 prop_noMatch =
     forAll genClosed $ \t ->
