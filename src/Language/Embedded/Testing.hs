@@ -112,11 +112,10 @@ oneHot l = do
     n <- choose (0,l-1)
     return $ replicate n False ++ [True] ++ replicate (l-n-1) False
 
-type TestSig = Binding :+: Construct
-
 -- | Adds 1 to all bound variables to give a different term that is quite probable to be alpha
--- equivalent to the first and quite probable to be alpha-inequivalent due to capturing
-shiftVars :: Term TestSig -> Term TestSig
+-- equivalent to the first and quite probable to be alpha-inequivalent due to capturing of free
+-- variables
+shiftVars :: (Binding :<: f, Functor f) => Term f -> Term f
 shiftVars = go []
   where
     go env t@(Term f)
@@ -126,13 +125,13 @@ shiftVars = go []
       | Just (Lam v a) <- project t = inject $ Lam (v+1) $ go ((v,v+1):env) a
       | otherwise = Term $ fmap (go env) f
 
+type TestSig = Binding :+: Construct
+
 -- | Mutates a term to get another one that is guaranteed not to be alpha-equivalent
 mutateTerm :: Term TestSig -> Gen (Term TestSig)
 mutateTerm t
-    | Just (Var v) <- project t = fmap (inject . Var) $ mutateName v
-mutateTerm t
-    | Just (Lam v a) <- project t = fmap (inject . Lam v) $ mutateTerm a
-mutateTerm t
+    | Just (Var v)          <- project t = fmap (inject . Var) $ mutateName v
+    | Just (Lam v a)        <- project t = fmap (inject . Lam v) $ mutateTerm a
     | Just (Construct c []) <- project t = return $ inject $ Construct (c++c) []
     | Just (Construct c as) <- project t = frequency
         [ (1, return $ inject (Construct (c++c) as))
