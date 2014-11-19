@@ -44,9 +44,12 @@ alphaEq' :: (EqF f, Binding :<: f, Functor f, Foldable f) => AlphaEnv -> Term f 
 alphaEq' env var1 var2
     | Just (Var v1) <- project var1
     , Just (Var v2) <- project var2
-    = case lookup v1 env of
-        Nothing  -> v1==v2 && null [() | (_,v2') <- env, v2'==v2]   -- Free variables
-        Just v2' -> v2==v2'
+    = case (lookup v1 env, lookup v2 env') of
+        (Nothing, Nothing)   -> v1==v2  -- Free variables
+        (Just v2', Just v1') -> v1==v1' && v2==v2'
+        _                    -> False
+  where
+    env' = [(v2,v1) | (v1,v2) <- env]
 alphaEq' env lam1 lam2
     | Just (Lam v1 body1) <- project lam1
     , Just (Lam v2 body2) <- project lam2

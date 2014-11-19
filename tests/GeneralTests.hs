@@ -31,6 +31,13 @@ prop_notAlphaEq =
     forAll genOpen $ \t ->
       forAll (mutateTerm t) $ \tm -> not (alphaEq t tm)
 
+-- Check alphaEq for terms that are almost equivalent, but where one has shadowing
+prop_alphaEqShadow = not (alphaEq t1 t2) && not (alphaEq t2 t1)
+  where
+    t1 :: Term TestSig
+    t1 = lam_ 0 $ c2 (lam_ 1 $ var_ 1) (lam_ 4 $ lam_ 3 $ lam_ 5 $ var_ 4)
+    t2 = lam_ 0 $ c2 (lam_ 1 $ var_ 1) (lam_ 2 $ lam_ 3 $ lam_ 2 $ var_ 2)
+
 prop_freeVars = forAll genClosed $ \(t :: Term TestSig) -> Set.null $ freeVars t
 
 prop_usedVars = forAll genOpen $ \(t :: Term TestSig) -> Set.isSubsetOf (freeVars t) (usedVars t)
