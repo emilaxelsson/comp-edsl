@@ -84,37 +84,49 @@ foldWithLet alg = go []
       = go ((v, go env a) : env) b
     go env (Term f) = alg $ fmap (go env) f
 
-inlineAllEnv :: (Binding :<: f, Let :<: f, Traversable f) => Defs f -> Term f -> Term f
-inlineAllEnv env t
+-- | A sequence of local definitions. Earlier definitions may depend on later ones, and earlier
+-- definitions shadow later ones.
+type Defs f = [(Name, Term f)]
+
+-- | Return an unused name given a list of used names
+unusedName :: [Name] -> Name
+unusedName [] = 0
+unusedName ns = maximum ns + 1
+
+-- This function is not safe to use in the presence of free variables. Use 'inlineAllEnv' instead,
+-- which has the same type.
+inlineAllHelp :: (Binding :<: f, Let :<: f, Traversable f) => Defs f -> Term f -> Term f
+inlineAllHelp env t
     | Just (Var v) <- project t
     , Just a       <- lookup v env
     = a
-inlineAllEnv env t
+inlineAllHelp env t
     | Just (Lam v a) <- project t
-    , let v'   = succ $ maximum $ (-1:) [v | (_,var) <- env, Just (Var v) <- [project var]]
+    , let v'   = unusedName [v | (_,var) <- env, Just (Var v) <- [project var]]
     , let env' = (v, inject $ Var v') : env
-    = inject $ Lam v' $ inlineAllEnv env' a
+    = inject $ Lam v' $ inlineAllHelp env' a
   where
-inlineAllEnv env t
-      | Just (v,a,b) <- viewLet t
-      = inlineAllEnv ((v, inlineAllEnv env a) : env) b
-inlineAllEnv env (Term f) = Term $ fmap (inlineAllEnv env) f
+inlineAllHelp env t
+    | Just (v,a,b) <- viewLet t
+    = inlineAllHelp ((v, inlineAllHelp env a) : env) b
+inlineAllHelp env (Term f) = Term $ fmap (inlineAllHelp env) f
 
 -- | Inline all let bindings
 --
 -- Uses the "rapier" method described in "Secrets of the Glasgow Haskell Compiler inliner" (Peyton
 -- Jones and Marlow, JFP 2006) to rename variables where there's risk of capturing.
 inlineAll :: (Binding :<: f, Let :<: f, Traversable f) => Term f -> Term f
-inlineAll t = inlineAllEnv init t
+inlineAll t = inlineAllHelp init t
   where
-    v    = maximum $ (-1:) $ Set.toList $ freeVars t
-    init = [(v, inject $ Var v)]
-      -- Insert the highest free variable in the initial environment to make sure that fresh names
-      -- are not used as free variables.
+    init = case Set.toList $ freeVars t of
+      [] -> []
+      vs -> let v = maximum vs in [(v, inject $ Var v)]
+        -- Insert the highest free variable in the initial environment to make sure that fresh names
+        -- are not already used as free variables.
 
--- | A sequence of local definitions. Earlier definitions may depend on later ones, and earlier
--- definitions shadow later ones.
-type Defs f = [(Name, Term f)]
+-- | Inline all let bindings in a given environment
+inlineAllEnv :: (Binding :<: f, Let :<: f, Traversable f) => Defs f -> Term f -> Term f
+inlineAllEnv env t = inlineAll $ addDefs env t
 
 -- | Add a number of local binders to a term. Existing binders shadow and may depend on the new
 -- ones. This function is the left inverse of 'splitDefs'.

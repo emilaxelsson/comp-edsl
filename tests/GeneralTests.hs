@@ -94,10 +94,17 @@ prop_foldWithLet = forAll genOpenDAG $ \(t :: Term (Binding :+: Let :+: Construc
   where
     alg = succ . Foldable.sum
 
-prop_inline = forAll genOpenDAG $ \(t :: Term (Binding :+: Let :+: Construct)) ->
+prop_inlineAll = forAll genOpenDAG $ \(t :: Term (Binding :+: Let :+: Construct)) ->
     inlineAll t `alphaEq` reference t
   where
     reference = foldWithLet Term . renameUnique
+      -- `foldWithLet Term` is a correct inliner if names are unique
+
+prop_inlineAllEnv = forAll genDAGEnv $ \(env, t :: Term (Binding :+: Let :+: Construct)) ->
+    inlineAllEnv env t `alphaEq` reference env t
+  where
+    reference env = foldWithLet Term . renameUnique . addDefs env
+      -- `foldWithLet Term` is a correct inliner if names are unique
 
 prop_splitDefs_removes_lets =
     forAll genOpenDAGTop $ \(t :: Term (Binding :+: Let :+: Construct)) ->
