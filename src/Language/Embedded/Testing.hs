@@ -1,3 +1,5 @@
+{-# LANGUAGE NoMonomorphismRestriction #-}
+
 module Language.Embedded.Testing where
 
 
@@ -11,6 +13,20 @@ import Data.Comp.Ops
 
 import Language.Embedded
 import Language.Embedded.Sharing
+
+
+
+----------------------------------------------------------------------------------------------------
+-- Debugging API
+----------------------------------------------------------------------------------------------------
+
+var_       = inject . Var
+lam_ v     = inject . Lam v
+let_ v a b = inject $ Let a $ lam_ v b
+c0         = inject $ Construct "c0" []
+c1 a       = inject $ Construct "c1" [a]
+c2 a b     = inject $ Construct "c2" [a,b]
+c3 a b c   = inject $ Construct "c3" [a,b,c]
 
 
 

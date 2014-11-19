@@ -1,3 +1,4 @@
+{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
@@ -9,6 +10,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import qualified Data.Set as Set
 
+import Test.Tasty
 import Test.Tasty.QuickCheck
 import Test.Tasty.TH
 
@@ -108,14 +110,10 @@ prop_splitDefs_addDefs =
 -- | 'expose' does not change the call-by-name semantics
 prop_expose =
     forAll genDAGEnv $ \(env, t :: Term (Binding :+: Let :+: Construct)) ->
-      inlineAllEnv' env (Term $ expose env t) `alphaEq` inlineAllEnv' env t
-  where
-    inlineAllEnv' env = foldWithLet Term . renameUnique . addDefs env
-      -- TODO Should be able to use inlineAllEnv instead
+      inlineAllEnv env (Term $ expose env t) `alphaEq` inlineAllEnv env t
 
-
-
--- TODO Test also that `expose` doesn't return a `Let` or a let-bound variable
+-- Test a single property:
+qc = defaultMain . testProperty "single test"
 
 main = $defaultMainGenerator
 
