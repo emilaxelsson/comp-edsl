@@ -21,35 +21,11 @@ import qualified Data.IntMap as IntMap
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import Data.Comp.Mapping
+import Data.Comp.Variables
 
 import Language.Embedded
 
 
-
-----------------------------------------------------------------------
--- TODO Remove when NumMap gets exported in compdata (also import of IntMap)
-
-newtype NumMap k v = NumMap (IntMap v) deriving Functor
-
-lookupNumMapp :: a -> Int -> NumMap t a -> a
-lookupNumMapp d k (NumMap m) = IntMap.findWithDefault d k m
-
-lookupNumMap' :: Int -> NumMap t a -> Maybe a
-lookupNumMap' k (NumMap m) = IntMap.lookup k m
-
-instance Mapping (NumMap k) (Numbered k) where
-    NumMap m1 & NumMap m2 = NumMap (IntMap.union m1 m2)
-    Numbered k _ |-> v = NumMap $ IntMap.singleton k v
-    empty = NumMap IntMap.empty
-
-    findWithDefault d (Numbered i _) m = lookupNumMapp d i m
-
-    prodMap p q (NumMap mp) (NumMap mq) = NumMap $ IntMap.mergeWithKey merge
-                                          (IntMap.map (\a -> (a,q))) (IntMap.map (\a -> (p,a))) mp mq
-      where merge _ p q = Just (p,q)
-
-----------------------------------------------------------------------
 
 getAnn :: (f :&: a) b -> a
 getAnn (f :&: a) = a
@@ -183,11 +159,11 @@ expose env t
     = expose env $ addDefs ds'' t
         -- TODO This is a bit inefficient because `expose` will immediately apply `splitDefs`
 
-    | otherwise = fmap pushDefs fn
+    | otherwise = fmap pushDefs $ getBoundVars f
   where
-    (ds, Term f) = splitDefs t
-    fn           = number f
-    pushDefs a   = addDefs (filter (not . boundIn (bindsVars fn) a . fst) ds) $ unNumbered a
+    (ds, Term f)    = splitDefs t
+    pushDefs (vs,a) = addDefs (filter (\(v,d) -> not $ Set.member v vs) ds) a
+                                 -- Remove locally bound variables from the definitions
 
 -- | TODO Remove
 expose2 :: (HasVars f Name, Binding :<: f, Let :<: f, Traversable f, f' ~ (f :&: a)) => a -> Defs f' -> Term f' -> f' (Term f')
@@ -199,16 +175,11 @@ expose2 ann env t
     = expose2 ann env $ addDefs2 ann ds'' t
         -- TODO This is a bit inefficient because `expose` will immediately apply `splitDefs`
 
-    | otherwise = fmap pushDefs fn
+    | otherwise = fmap pushDefs $ getBoundVars f
   where
-    (ds, Term f) = splitDefs2 t
-    fn           = number f
-    pushDefs a   = addDefs2 ann (filter (not . boundIn (bindsVars fn) a . fst) ds) $ unNumbered a
-
--- | @`boundIn bs a v`@ checks if variable @v@ is bound in sub-term @a@ of a constructor for which
--- 'bindsVars' returns @bs@.
-boundIn :: NumMap a (Set Name) -> Numbered a -> Name -> Bool
-boundIn bs (Numbered i _) v = maybe False (Set.member v) $ lookupNumMap' i bs
+    (ds, Term f)    = splitDefs2 t
+    pushDefs (vs,a) = addDefs2 ann (filter (\(v,d) -> not $ Set.member v vs) ds) a
+                                 -- Remove locally bound variables from the definitions
 
 -- | Use a 'DAG' transformer to transform a 'Defs' list
 transDefs
