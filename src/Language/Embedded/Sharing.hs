@@ -45,64 +45,105 @@ instance HasVars f v => HasVars (f :&: a) v
 -- shared terms does not deal with capturing (only a problem when there are other binders than `Let`
 -- in the term). E.g. @`foldWithLet` `Term`@ will inline all shared terms, but will generally not
 -- preserve the semantics.
-foldWithLet :: (Binding :<: f, Let :<: f, Functor f) => (f a -> a) -> Term f -> a
+foldWithLet :: (Binding :<<: f, Let :<<: f, Functor f) => (f a -> a) -> Term f -> a
 foldWithLet alg = go []
   where
     go env t
-      | Just (Var v) <- project t
+      | Just (Var v) <- prjTerm t
       , Just a       <- lookup v env
       = a
-    go env t
-      | Just (Lam v a) <- project t
-      = alg $ inj $ Lam v $ go (filter ((v/=) . fst) env) a
+    go env t@(Term f)
+      | Just (Lam v a) <- prjTerm t
+      = alg $ flip fmap f $ \_ -> go (filter ((v/=) . fst) env) a
     go env t
       | Just (v,a,b) <- viewLet t
       = go ((v, go env a) : env) b
     go env (Term f) = alg $ fmap (go env) f
 
--- | A sequence of local definitions. Earlier definitions may depend on later ones, and earlier
--- definitions shadow later ones.
-type Defs f = [(Name, Term f)]
+-- | Replacement for a variable. 'Alias' gives a different name for the variable. 'Unfold' gives a
+-- definition for the variable.
+data VarReplace f
+    = Alias Name
+    | Unfold (Term f)
+  deriving (Eq, Ord, Show)
+  -- Note: It may seem easier to use 'Unfold' to cover both cases (aliasing would be the same as
+  -- unfolding to a different name), but that has the disadvantage that one must be able to
+  -- construct variables, so functions will need a 'Binding :<:' constraint rather than just
+  -- 'Binding :<<:'.
+
+-- | Variables in scope. Let-bound variables map to their unfolding, while other variables map to
+-- a new name. Earlier definitions may depend on later ones, and earlier definitions shadow later
+-- ones.
+type Scope f = [(Name, VarReplace f)]
 
 -- | Return an unused name given a list of used names
 unusedName :: [Name] -> Name
 unusedName [] = 0
 unusedName ns = maximum ns + 1
 
--- This function is not safe to use in the presence of free variables. Use 'inlineAllEnv' instead,
--- which has the same type.
-inlineAllHelp :: (Binding :<: f, Let :<: f, Traversable f) => Defs f -> Term f -> Term f
-inlineAllHelp env t
-    | Just (Var v) <- project t
-    , Just a       <- lookup v env
-    = a
-inlineAllHelp env t
-    | Just (Lam v a) <- project t
-    , let v'   = unusedName [v | (_,var) <- env, Just (Var v) <- [project var]]
-    , let env' = (v, inject $ Var v') : env
-    = inject $ Lam v' $ inlineAllHelp env' a
-  where
-inlineAllHelp env t
+inlineAllHelp :: (Binding :<<: f, Let :<<: f, Traversable f) => Scope f -> Term f -> Term f
+inlineAllHelp scope t@(Term f)
+    | Just (Var v, back) <- prjInj f
+    , Just rep           <- lookup v scope
+    = case rep of
+        Unfold a -> a
+        Alias v' -> Term $ back $ Var v'
+inlineAllHelp scope t@(Term f)
+    | Just (Lam v a, back) <- prjInj f
+    , let v''    = unusedName [v' | (_,Alias v') <- scope]
+    , let scope' = (v, Alias v'') : scope
+    = Term $ back $ Lam v'' $ inlineAllHelp scope' a
+inlineAllHelp scope t
     | Just (v,a,b) <- viewLet t
-    = inlineAllHelp ((v, inlineAllHelp env a) : env) b
+    = inlineAllHelp ((v, Unfold (inlineAllHelp scope a)) : scope) b
 inlineAllHelp env (Term f) = Term $ fmap (inlineAllHelp env) f
+
+-- TODO Can there be alias chains? If so, the first case needs to chase until it finds an alias to
+--      itself.
+--
+--      Also, since only the last name in a chain is going to be used, the search for unused names
+--      could be improved a bit.
+--
+--      Should one also consider variables that are not aliased (variables that appear in unfoldings
+--      when looking for unused names?
+
+-- | A sequence of local definitions. Earlier definitions may depend on later ones, and earlier
+-- definitions shadow later ones.
+type Defs f = [(Name, Term f)]
+
+inlineAllEnvHelp :: (Binding :<<: f, Let :<<: f, Traversable f) =>
+    Scope f -> Defs f -> Term f -> Term f
+inlineAllEnvHelp scope defs = go scope (reverse defs)
+  where
+    go scope []           = inlineAllHelp scope
+    go scope ((v,s):defs) = go ((v, Unfold (inlineAllHelp scope s)) : scope) defs
+  -- This function should be equivalent to `inlineAllHelp scope $ addDefs defs t`, but that would
+  -- require a different type. Note the similarity between the last case of `go` and the case for
+  -- `Let` in `inlineAllHelp`.
+
+
+-- | Inline all let bindings in a given environment
+--
+-- Uses the "rapier" method described in "Secrets of the Glasgow Haskell Compiler inliner" (Peyton
+-- Jones and Marlow, JFP 2006) to rename variables where there's risk of capturing.
+inlineAllEnv :: (Binding :<<: f, Let :<<: f, Traversable f) => Defs f -> Term f -> Term f
+inlineAllEnv env t = inlineAllEnvHelp init env t
+  where
+    free = foldl (\vs (v,s) -> Set.delete v vs `Set.union` freeVars s) (freeVars t) env
+      -- `free` should be equivalent to `freeVars $ addDefs env t`, but that would require a
+      -- different type
+    init  = case Set.toList free of
+      [] -> []
+      vs -> let v = maximum vs in [(v, Alias v)]
+        -- Insert the highest free variable in the initial environment to make sure that fresh names
+        -- are not already used as free variables
 
 -- | Inline all let bindings
 --
 -- Uses the "rapier" method described in "Secrets of the Glasgow Haskell Compiler inliner" (Peyton
 -- Jones and Marlow, JFP 2006) to rename variables where there's risk of capturing.
-inlineAll :: (Binding :<: f, Let :<: f, Traversable f) => Term f -> Term f
-inlineAll t = inlineAllHelp init t
-  where
-    init = case Set.toList $ freeVars t of
-      [] -> []
-      vs -> let v = maximum vs in [(v, inject $ Var v)]
-        -- Insert the highest free variable in the initial environment to make sure that fresh names
-        -- are not already used as free variables.
-
--- | Inline all let bindings in a given environment
-inlineAllEnv :: (Binding :<: f, Let :<: f, Traversable f) => Defs f -> Term f -> Term f
-inlineAllEnv env t = inlineAll $ addDefs env t
+inlineAll :: (Binding :<<: f, Let :<<: f, Traversable f) => Term f -> Term f
+inlineAll = inlineAllEnv []
 
 -- | Add a number of local binders to a term. Existing binders shadow and may depend on the new
 -- ones. This function is the left inverse of 'splitDefs'.
@@ -117,27 +158,12 @@ addDefs2 ann ((v,a):ds) t = addDefs2 ann ds $ Term $ (:&: ann) $ inj $ Let a $ T
 
 -- | Gather all let bindings at the root of a term. The result is the the local definitions and the
 -- first non-let node. 'addDefs' is the left inverse of this function.
-splitDefs :: (Binding :<: f, Let :<: f, Functor f) => Term f -> (Defs f, Term f)
+splitDefs :: (Binding :<<: f, Let :<<: f, Functor f) => Term f -> (Defs f, Term f)
 splitDefs = go []
   where
     go ds t
         | Just (v,a,b) <- viewLet t = go ((v,a):ds) b
         | otherwise                 = (ds,t)
-
--- | TODO Remove
-viewLet2 :: (Binding :<: f, Let :<: f, f' ~ (f :&: a)) => Term f' -> Maybe (Name, Term f', Term f')
-viewLet2 (Term (f :&: _)) = do
-    Let a (Term (lam :&: _)) <- proj f
-    Lam v b                  <- proj lam
-    return (v,a,b)
-
--- | TODO Remove
-splitDefs2 :: (Binding :<: f, Let :<: f, Functor f, f' ~ (f :&: a)) => Term f' -> (Defs f', Term f')
-splitDefs2 = go []
-  where
-    go ds t
-        | Just (v,a,b) <- viewLet2 t = go ((v,a):ds) b
-        | otherwise                  = (ds,t)
 
 -- | Expose the top-most constructor in a 'DAG' given an environment of definitions in scope.
 -- It works roughly as follows:
@@ -150,7 +176,7 @@ splitDefs2 = go []
 --
 -- This function assumes that variables and binders are exactly those recognized by the methods of
 -- the 'HasVars' class, except for 'Where' which also binds variables.
-expose :: (HasVars f Name, Binding :<: f, Let :<: f, Traversable f) => Defs f -> Term f -> f (Term f)
+expose :: (HasVars f Name, Binding :<<: f, Binding :<: f, Let :<<: f, Let :<: f, Traversable f) => Defs f -> Term f -> f (Term f)
 expose env t
     | Just v  <- isVar f
     , let ds'  = dropWhile ((v /=) . fst) ds  -- Strip irrelevant bindings from `ds`
@@ -166,7 +192,7 @@ expose env t
                                  -- Remove locally bound variables from the definitions
 
 -- | TODO Remove
-expose2 :: (HasVars f Name, Binding :<: f, Let :<: f, Traversable f, f' ~ (f :&: a)) => a -> Defs f' -> Term f' -> f' (Term f')
+expose2 :: (HasVars f Name, Binding :<: f, Binding :<<: f, Let :<: f, Let :<<: f, Traversable f, f' ~ (f :&: a)) => a -> Defs f' -> Term f' -> f' (Term f')
 expose2 ann env t
     | Just v  <- isVar f
     , let ds'  = dropWhile ((v /=) . fst) ds  -- Strip irrelevant bindings from `ds`
@@ -177,7 +203,7 @@ expose2 ann env t
 
     | otherwise = fmap pushDefs $ getBoundVars f
   where
-    (ds, Term f)    = splitDefs2 t
+    (ds, Term f)    = splitDefs t
     pushDefs (vs,a) = addDefs2 ann (filter (\(v,d) -> not $ Set.member v vs) ds) a
                                  -- Remove locally bound variables from the definitions
 

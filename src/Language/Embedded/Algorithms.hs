@@ -15,20 +15,20 @@ import Language.Embedded.Constructs
 
 
 -- | Get the set of free variables in a term
-freeVars :: (Binding :<: f, Functor f, Foldable f) => Term f -> Set Name
+freeVars :: (Binding :<<: f, Functor f, Foldable f) => Term f -> Set Name
 freeVars t
-    | Just (Var v) <- project t = Set.singleton v
+    | Just (Var v) <- prjTerm t = Set.singleton v
 freeVars t
-    | Just (Lam v a) <- project t = Set.delete v $ freeVars a
+    | Just (Lam v a) <- prjTerm t = Set.delete v $ freeVars a
 freeVars (Term f) = Foldable.fold $ fmap freeVars f
 
 -- | Get the set of variables used in a term
-usedVars :: (Binding :<: f, Functor f, Foldable f) => Term f -> Set Name
-usedVars t = Set.fromList [v | Var v <- subterms' t]
+usedVars :: (Binding :<<: f, Functor f, Foldable f) => Term f -> Set Name
+usedVars t = Set.fromList [v | Just (Var v) <- map prjTerm $ subterms t]
 
 -- | Get the set of variables introduced or used in a term
-allVars :: (Binding :<: f, Functor f, Foldable f) => Term f -> Set Name
-allVars t = Set.fromList [v | v <- map viewBind $ subterms' t]
+allVars :: (Binding :<<: f, Functor f, Foldable f) => Term f -> Set Name
+allVars t = Set.fromList [v | Just v <- map (fmap viewBind . prjTerm) $ subterms t]
   where
     viewBind (Var v)   = v
     viewBind (Lam v _) = v
@@ -40,10 +40,10 @@ constrEq a b = eqF (fmap (const ()) a) (fmap (const ()) b)
 -- | Environment used by 'alphaEq''
 type AlphaEnv = [(Name,Name)]
 
-alphaEq' :: (EqF f, Binding :<: f, Functor f, Foldable f) => AlphaEnv -> Term f -> Term f -> Bool
+alphaEq' :: (EqF f, Binding :<<: f, Functor f, Foldable f) => AlphaEnv -> Term f -> Term f -> Bool
 alphaEq' env var1 var2
-    | Just (Var v1) <- project var1
-    , Just (Var v2) <- project var2
+    | Just (Var v1) <- prjTerm var1
+    , Just (Var v2) <- prjTerm var2
     = case (lookup v1 env, lookup v2 env') of
         (Nothing, Nothing)   -> v1==v2  -- Free variables
         (Just v2', Just v1') -> v1==v1' && v2==v2'
@@ -51,15 +51,15 @@ alphaEq' env var1 var2
   where
     env' = [(v2,v1) | (v1,v2) <- env]
 alphaEq' env lam1 lam2
-    | Just (Lam v1 body1) <- project lam1
-    , Just (Lam v2 body2) <- project lam2
+    | Just (Lam v1 body1) <- prjTerm lam1
+    , Just (Lam v2 body2) <- prjTerm lam2
     = alphaEq' ((v1,v2):env) body1 body2
 alphaEq' env (Term a) (Term b)
     =  constrEq a b
     && all (uncurry (alphaEq' env)) (zip (toList a) (toList b))
 
 -- | Alpha-equivalence
-alphaEq :: (EqF f, Binding :<: f, Functor f, Foldable f) => Term f -> Term f -> Bool
+alphaEq :: (EqF f, Binding :<<: f, Functor f, Foldable f) => Term f -> Term f -> Bool
 alphaEq = alphaEq' []
 
 -- | Generate an infinite list of fresh names given a list of allocated names
@@ -85,34 +85,34 @@ freshVar = do
 -- The free variables are left untouched. The bound variables are given unique names using as small
 -- names as possible. The first argument is a list of reserved names. Reserved names and names of
 -- free variables are not used when renaming bound variables.
-renameUnique' :: (Binding :<: f, Traversable f) => [Name] -> Term f -> Term f
+renameUnique' :: (Binding :<<: f, Traversable f) => [Name] -> Term f -> Term f
 renameUnique' vs t = flip evalState fs $ go [] t
   where
     fs = freshVars $ Set.toAscList (freeVars t `Set.union` Set.fromList vs)
-    go env t
-        | Just (Var v) <- project t
+    go env t@(Term f)
+        | Just (Var v, back) <- prjInj f
         = case lookup v env of
-            Just v' -> return $ inject (Var v')
+            Just v' -> return $ Term $ back $ Var v'
             _ -> return t
-        | Just (Lam v a) <- project t
+        | Just (Lam v a, back) <- prjInj f
         = do
             v' <- freshVar
             a' <- go ((v,v'):env) a
-            return $ inject (Lam v' a')
+            return $ Term $ back $ Lam v' a'
     go env (Term f) = fmap Term $ traverse (go env) f
 
 -- | Rename the bound variables in a term
 --
 -- The free variables are left untouched. The bound variables are given unique names using as small
 -- names as possible. Names of free variables are not used when renaming bound variables.
-renameUnique :: (Binding :<: f, Traversable f) => Term f -> Term f
+renameUnique :: (Binding :<<: f, Traversable f) => Term f -> Term f
 renameUnique = renameUnique' []
 
 -- | Capture-avoiding parallel substitution
 --
 -- If the list contains multiple mappings for the same variable, the first one has precedence. Bound
 -- variables may get renamed, even when there is no risk for capturing.
-parSubst :: (Binding :<: f, Traversable f)
+parSubst :: (Binding :<<: f, Traversable f)
     => [(Name, Term f)]  -- ^ Substitution
     -> Term f
     -> Term f
@@ -120,7 +120,7 @@ parSubst s = transform sub . renameUnique' fvs
   where
     fvs = concatMap (Set.toList . freeVars . snd) s
     sub t
-      | Just (Var v') <- project t
+      | Just (Var v') <- prjTerm t
       , Just new      <- lookup v' s
       = new
     sub t = t
@@ -128,7 +128,7 @@ parSubst s = transform sub . renameUnique' fvs
 -- | Capture-avoiding substitution
 --
 -- Bound variables may get renamed, even when there is no risk for capturing.
-subst :: (Binding :<: f, Traversable f)
+subst :: (Binding :<<: f, Traversable f)
     => Name    -- ^ Variable to replace
     -> Term f  -- ^ Term to substitute for the variable
     -> Term f  -- ^ Term to substitute in
@@ -142,25 +142,25 @@ subst v new = parSubst [(v,new)]
 -- variable are equal.
 --
 -- If there are no free variables, 'match' corresponds to 'alphaEq'.
-match :: (Binding :<: f, EqF f, Functor f, Foldable f)
+match :: (Binding :<<: f, EqF f, Functor f, Foldable f)
     => Term f  -- ^ Pattern
     -> Term f  -- ^ Term
     -> Maybe [(Name, Term f)]
 match = go []
   where
     go env p t
-      | Just (Var v) <- project p
-      , Just (Var w) <- project t
+      | Just (Var v) <- prjTerm p
+      , Just (Var w) <- prjTerm t
       , Just v'      <- lookup v env
       , w == v'
       = Just []
     go env p t
-      | Just (Var v) <- project p
+      | Just (Var v) <- prjTerm p
       , Nothing      <- lookup v env
       = Just [(v,t)]
     go env p t
-      | Just (Lam v p') <- project p
-      , Just (Lam w t') <- project t
+      | Just (Lam v p') <- prjTerm p
+      , Just (Lam w t') <- prjTerm t
       = go ((v,w):env) p' t'
     go env (Term pf) (Term tf)
       | constrEq pf tf

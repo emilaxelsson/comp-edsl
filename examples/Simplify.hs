@@ -40,7 +40,7 @@ simplify env t = addDefs2 100 ds' $ simplifyUp env' def
     def  = close $ fmap (simplify env') f  -- Default result
 
 -- TODO Remove
-alpEq :: (EqF f, Binding :<: f, Let :<: f, Functor f, Foldable f) =>
+alpEq :: (EqF f, Binding :<<: f, Let :<<: f, Functor f, Foldable f) =>
     Term (f :&: a) -> Term (f :&: a) -> Bool
 alpEq a b = stripAnn a `alphaEq` stripAnn b
 

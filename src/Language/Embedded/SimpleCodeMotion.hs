@@ -22,7 +22,7 @@ import Language.Embedded.Algorithms
 
 
 -- | Substituting a sub-expression. Assumes no variable capturing in the expressions involved.
-substitute :: (EqF f, Binding :<: f, Functor f, Foldable f)
+substitute :: (EqF f, Binding :<<: f, Functor f, Foldable f)
     => Term f  -- ^ Sub-expression to be replaced
     -> Term f  -- ^ Replacing sub-expression
     -> Term f  -- ^ Whole expression
@@ -32,7 +32,7 @@ substitute target new t@(Term f)
     | otherwise        = Term $ fmap (substitute target new) f
 
 -- | Count the number of occurrences of a sub-expression
-count :: (EqF f, Binding :<: f, Functor f, Foldable f)
+count :: (EqF f, Binding :<<: f, Functor f, Foldable f)
     => Term f  -- ^ Expression to count
     -> Term f  -- ^ Expression to count in
     -> Int
@@ -51,19 +51,19 @@ data MotionEnv f = MotionEnv
         -- expression
     }
 
-independent :: (Binding :<: f, Functor f, Foldable f) => MotionEnv f -> Term f -> Bool
+independent :: (Binding :<<: f, Functor f, Foldable f) => MotionEnv f -> Term f -> Bool
 independent env t
-    | Just (Var v) <- project t
+    | Just (Var v) <- prjTerm t
     = not (v `member` dependencies env)
 independent env (Term f) = Foldable.and $ fmap (independent env) f
 
-isVariable :: (Binding :<: f) => Term f -> Bool
+isVariable :: (Binding :<<: f) => Term f -> Bool
 isVariable t
-    | Just (Var _) <- project t = True
+    | Just (Var _) <- prjTerm t = True
     | otherwise = False
 
 -- | Checks whether a sub-expression in a given environment can be lifted out
-liftable :: (Binding :<: f, Functor f, Foldable f) => MotionEnv f -> Term f -> Bool
+liftable :: (Binding :<<: f, Functor f, Foldable f) => MotionEnv f -> Term f -> Bool
 liftable env a = independent env a && not (isVariable a) && heuristic
     -- Lifting dependent expressions is semantically incorrect
     -- Lifting variables would cause `codeMotion` to loop
@@ -71,7 +71,7 @@ liftable env a = independent env a && not (isVariable a) && heuristic
     heuristic = inLambda env || (counter env a > 1)
 
 -- | Choose a sub-expression to share
-choose :: forall f . (EqF f, Binding :<: f, Functor f, Foldable f) =>
+choose :: forall f . (EqF f, Binding :<<: f, Functor f, Foldable f) =>
     (Term f -> Bool) -> Term f -> Maybe (Term f)
 choose hoistOver a = chooseEnvSub initEnv a
   where
@@ -92,7 +92,7 @@ choose hoistOver a = chooseEnvSub initEnv a
     -- | Like 'chooseEnv', but does not consider the top expression for sharing
     chooseEnvSub :: MotionEnv f -> Term f -> Maybe (Term f)
     chooseEnvSub env t
-        | Just (Lam v b) <- project t
+        | Just (Lam v b) <- prjTerm t
         = chooseEnv (env' v) b
       where
         env' v = env
@@ -102,7 +102,7 @@ choose hoistOver a = chooseEnvSub initEnv a
     chooseEnvSub env (Term f) = Foldable.foldr mplus Nothing $ fmap (chooseEnv env) f
 
 -- | Perform common sub-expression elimination and variable hoisting
-codeMotion :: forall f . (EqF f, Binding :<: f, Let :<: f, Traversable f)
+codeMotion :: forall f . (EqF f, Binding :<: f, Binding :<<: f, Let :<: f, Traversable f)
     => (Term f -> Bool)
           -- ^ Control wether a sub-expression can be hoisted over the given expression
     -> Term f
@@ -118,7 +118,7 @@ codeMotion hoistOver a@(Term f)
         body <- codeMotion hoistOver $ substitute b (inject (Var v)) a
         return $ inject $ Let b' $ inject $ Lam v body
 
-codeMotion0 :: (EqF f, Binding :<: f, Let :<: f, Traversable f)
+codeMotion0 :: (EqF f, Binding :<: f, Binding :<<: f, Let :<: f, Traversable f)
     => (Term f -> Bool)
           -- ^ Control wether a sub-expression can be hoisted over the given expression
     -> Term f
