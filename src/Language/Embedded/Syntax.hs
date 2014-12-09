@@ -63,6 +63,9 @@ module Language.Embedded.Syntax
     , TERM (..)
     , ConstrType
     , SmartConstr (..)
+    , (:<<:) (..)
+    , prj
+    , prjTerm
       -- * Syntactic sugar
     , Syntactic (..)
     , resugar
@@ -150,6 +153,60 @@ instance
     type SmartSup (TERM sup a -> smart)                   = SmartSup smart
     type SmartSub (TERM sup a -> smart) (Term sup -> con) = SmartSub smart con
     smartConstr f = smartConstr . f . unTERM
+
+-- | Like ':<:' but slightly weaker. In particular, this class has an instance for ':&:', which
+-- ':<:' doesn't have.
+class sub :<<: sup
+  where
+    prjInj :: sup a -> Maybe (sub a, sub b -> sup b)
+
+instance f :<<: f
+  where
+    prjInj f = Just (f, id)
+
+instance sub :<<: (sub :+: sup)
+  where
+    prjInj (Inl f) = Just (f, Inl)
+    prjInj _       = Nothing
+
+instance (sub :<<: sup) => sub :<<: (f :+: sup)
+  where
+    prjInj (Inr f) = do
+        (g,back) <- prjInj f
+        return (g, Inr . back)
+    prjInj _ = Nothing
+
+-- | In this instance, the injection will put back the annotation in the same way as in the original
+-- argument
+instance (sub :<<: sup) => sub :<<: (sup :&: ann)
+  where
+    prjInj (f :&: a) = do
+        (g,back) <- prjInj f
+        return (g, (:&:a) . back)
+
+prj :: (sub :<<: sup) => sup a -> Maybe (sub a)
+prj = fmap fst . prjInj
+
+prjTerm :: (sub :<<: sup) => Term sup -> Maybe (sub (Term sup))
+prjTerm = prj . unTerm
+
+-- The following with* functions are not exported, because I'm not sure they're needed.
+
+withSub :: (sub :<<: sup) => sup a -> (sub a -> sub b) -> Maybe (sup b)
+withSub f k = case prjInj f of
+    Just (f',back) -> Just $ back $ k f'
+    Nothing -> Nothing
+
+withSub' :: (sub :<<: sup) => sup a -> (sub a -> sub a) -> sup a
+withSub' f k = case prjInj f of
+    Just (f',back) -> back $ k f'
+    Nothing -> f
+
+withSubTerm :: (sub :<<: sup) => Term sup -> (sub (Term sup) -> sub (Term sup)) -> Maybe (Term sup)
+withSubTerm (Term f) = fmap Term . withSub f
+
+withSubTerm' :: (sub :<<: sup) => Term sup -> (sub (Term sup) -> sub (Term sup)) -> Term sup
+withSubTerm' (Term f) = Term . withSub' f
 
 
 
