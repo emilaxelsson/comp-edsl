@@ -57,7 +57,7 @@ class Compile f t
     compileAlg :: Alg f (Compiler t)
 
 -- | Typed compilation
-compile :: forall f t . (Compile f t, Traversable f, Binding :<: f) =>
+compile :: forall f t . (Compile f t, Traversable f) =>
     [(Name, E (TypeRep t))] -> Term f -> Maybe (CExp t)
 compile cenv t = cata compileAlg t [] cenv
 
@@ -66,7 +66,7 @@ evalTop :: forall f t a
     .  ( Typeable t a
        , Compile f t
        , Traversable f
-       , Binding :<: f
+       , Binding :<<: f
        , FunType S.:<: t
        , TypeEq t t
        )
@@ -74,8 +74,8 @@ evalTop :: forall f t a
 evalTop _ e = go e typeRep []
   where
     go :: Term f -> TypeRep t b -> RunEnv t -> b
-    go e t env  -- This case handles top-level lambdas
-        | Just (Lam v b) <- project e
+    go (Term f) t env  -- This case handles top-level lambdas
+        | Just (Lam v b) <- prj f
         , [E ta, E tb]   <- matchCon t
         , Just Dict      <- typeEq t (funType ta tb)
         = \a -> go b tb ((v, Dyn ta a) : env)
