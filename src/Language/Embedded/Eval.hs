@@ -1,7 +1,10 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | Typed compilation (see "Typing Dynamic Typing" (Baars and Swierstra, ICFP 2002))
+-- | Typed compilation
+-- See "Typing Dynamic Typing" (Baars and Swierstra, ICFP 2002) and
+-- "Efficient Evaluation for Untyped and Compositional Representations of Expressions"
+-- (<http://www.cse.chalmers.se/~emax/documents/axelsson2014efficient.pdf>)
 
 module Language.Embedded.Eval
     ( -- * Type universes
