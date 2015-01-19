@@ -95,36 +95,37 @@ prop_noMatch =
     forAll genClosed $ \t ->
       forAll (mutateTerm t) $ \tm -> isNothing (match t tm)
 
--- 'foldWithLet' has the same behavior as 'cata' composed with 'inlineLet'
-prop_foldWithLet = forAll genOpenDAG $ \(t :: Term (Binding :+: Let :+: Construct)) ->
-    foldWithLet alg t == cata alg (inlineAll t)
+-- 'foldDAG' has the same behavior as 'cata' composed with 'inlineLet'
+prop_foldDAG = forAll genOpenDAG $ \(t :: DAG (Binding :+: Construct)) ->
+    foldDAG alg t == cata alg (inlineDAG t)
   where
     alg = succ . Foldable.sum
 
-prop_inlineAll = forAll genOpenDAG $ \(t :: Term (Binding :+: Let :+: Construct)) ->
-    inlineAll t `alphaEq` reference t
+prop_inlineDAG = forAll genOpenDAG $ \(t :: DAG (Binding :+: Construct)) ->
+    inlineDAG t `alphaEq` reference t
   where
-    reference = foldWithLet Term . renameUnique
-      -- `foldWithLet Term` is a correct inliner if names are unique
-
-prop_inlineAllEnv = forAll genDAGEnv $ \(env, t :: Term (Binding :+: Let :+: Construct)) ->
-    inlineAllEnv env t `alphaEq` reference env t
-  where
-    reference env = foldWithLet Term . renameUnique . addDefs env
-      -- `foldWithLet Term` is a correct inliner if names are unique
+    reference = foldDAG Term . renameUnique
+      -- `foldDAG Term` is a correct inliner if names are unique
 
 prop_splitDefs_removes_lets =
-    forAll genOpenDAGTop $ \(t :: Term (Binding :+: Let :+: Construct)) ->
-      not $ isJust $ viewLet $ snd $ splitDefs t
+    forAll genOpenDAGTop $ \(t :: DAG (Binding :+: Construct)) ->
+      case unTerm $ snd $ splitDefs t of
+          DLet _ _ _ -> False
+          _ -> True
 
 prop_splitDefs_addDefs =
-    forAll genOpenDAGTop $ \(t :: Term (Binding :+: Let :+: Construct)) ->
+    forAll genOpenDAGTop $ \(t :: DAG (Binding :+: Construct)) ->
       uncurry addDefs (splitDefs t) == t
 
 -- | 'expose' does not change the call-by-name semantics
 prop_expose =
-    forAll genDAGEnv $ \(env, t :: Term (Binding :+: Let :+: Construct)) ->
-      inlineAllEnv env (Term $ expose env t) `alphaEq` inlineAllEnv env t
+    forAll genDAGEnv $ \(env, t :: DAG (Binding :+: Construct)) ->
+      uniqueDefs env ==>
+          (inlineDAG (addDefs env $ Term $ DIn $ expose env t) `alphaEq` inlineDAG (addDefs env t))
+  where
+    uniqueDefs ds = vs == nub vs
+      where
+        vs = map fst ds
 
 -- Test a single property:
 qc = defaultMain . testProperty "single test"

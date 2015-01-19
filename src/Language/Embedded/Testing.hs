@@ -22,11 +22,19 @@ import Language.Embedded.Sharing
 
 var_       = inject . Var
 lam_ v     = inject . Lam v
-let_ v a b = inject $ Let a $ lam_ v b
 c0         = inject $ Construct "c0" []
 c1 a       = inject $ Construct "c1" [a]
 c2 a b     = inject $ Construct "c2" [a,b]
 c3 a b c   = inject $ Construct "c3" [a,b,c]
+
+ddvar_      = Term . DVar
+dlet_ v a b = Term $ DLet v a b
+dvar_       = Term . DIn . inj . Var
+dlam_ v     = Term . DIn . inj . Lam v
+d0          = Term $ DIn $ inj $ Construct "d0" []
+d1 a        = Term $ DIn $ inj $ Construct "d1" [a]
+d2 a b      = Term $ DIn $ inj $ Construct "d2" [a,b]
+d3 a b c    = Term $ DIn $ inj $ Construct "d3" [a,b,c]
 
 
 
@@ -142,76 +150,91 @@ mutateTerm t
           )
         ]
 
+
+
+----------------------------------------------------------------------------------------------------
+-- * Generation of 'DAG's
+----------------------------------------------------------------------------------------------------
+
+-- | Generate a bound (probability b/(b+f)) or free (probability f/(b+f)) variable
+pickDVar :: Int -> Int -> [DName] -> Gen DName
+pickDVar b f = fmap toDName . pickVar b f . map fromDName
+
 genLets
     :: (Constructors f, Traversable f)
-    => Bool    -- ^ Only closed terms?
-    -> Int     -- ^ Size
-    -> [Name]  -- ^ Variables in scope
-    -> Int     -- ^ Number of bindings
-    -> Gen (Term (Binding :+: Let :+: f))
-genLets closed s env 0 = genDAG closed s env
-genLets closed s env n = do
-    a <- genDAG closed (s `div` 2) env
-    v <- pickVar 1 4 env
-    b <- genLets closed (s `div` 2) (v:env) (n-1)
-    return $ Term $ Inr $ Inl $ Let a $ Term $ Inl $ Lam v b
+    => Bool     -- ^ Only closed terms?
+    -> Int      -- ^ Size
+    -> [DName]  -- ^ Variables in scope
+    -> [Name]   -- ^ Variables in scope
+    -> Int      -- ^ Number of bindings
+    -> Gen (DAG (Binding :+: f))
+genLets closed s denv env 0 = genDAG closed s denv env
+genLets closed s denv env n = do
+    a <- genDAG closed (s `div` 2) denv env
+    v <- pickDVar 1 4 denv
+    b <- genLets closed (s `div` 2) (v:denv) env (n-1)
+    return $ Term $ DLet v a b
 
 -- | Generate a term with let binders for sharing
 genDAG
     :: (Constructors f, Functor f, Traversable f)
-    => Bool    -- ^ Only closed terms?
-    -> Int     -- ^ Size
-    -> [Name]  -- ^ Variables in scope
-    -> Gen (Term (Binding :+: Let :+: f))
-genDAG closed 0 env = frequency
-    [ (1, fmap Term
+    => Bool     -- ^ Only closed terms?
+    -> Int      -- ^ Size
+    -> [DName]  -- ^ Variables in scope
+    -> [Name]   -- ^ Variables in scope
+    -> Gen (DAG (Binding :+: f))
+genDAG closed 0 denv env = frequency
+    [ (freqDVar, fmap (Term . DVar) $ oneof $ map return denv
+      )
+    , (1, fmap Term
         $ oneof
-        $ map (return . Inr . Inr . fmap (const undefined))
+        $ map (return . DIn . Inr . fmap (const undefined))
         $ filter (null . toList) constructors
       )
     , (freqVar, do
             v <- pickVar 5 freqFree env
-            return $ Term $ Inl $ Var v
+            return $ Term $ DIn $ Inl $ Var v
       )
     ]
   where
-    freqVar  = if closed && null env then 0 else 4
+    freqDVar = if null denv then 0 else 2
+    freqVar  = if closed && null env then 0 else 2
     freqFree = if closed then 0 else 1
-genDAG closed s env = frequency
+genDAG closed s denv env = frequency
     [ (2, do
-            c <- oneof $ map (return . Inr . Inr) $ filter (not . null . toList) constructors
+            c <- oneof $ map (return . DIn . Inr) $ filter (not . null . toList) constructors
             let l = length (toList c)
-            fmap Term $ traverse (\_ -> genDAG closed (s `div` l) env) c
+            fmap Term $ traverse (\_ -> genDAG closed (s `div` l) denv env) c
       )
     , (2, do
             v <- pickVar 1 3 env
-            fmap (Term . Inl . Lam v) $ genDAG closed (s-1) (v:env)
+            fmap (Term . DIn . Inl . Lam v) $ genDAG closed (s-1) denv (v:env)
       )
     , (2, do
             n <- choose (1,5)
-            genLets closed s env n
+            genLets closed s denv env n
       )
-    , (1, genDAG closed 0 env)
+    , (1, genDAG closed 0 denv env)
     ]
 
 -- | Generate a closed term with many 'Let' binders
-genClosedDAG :: (Constructors f, Traversable f) => Gen (Term (Binding :+: Let :+: f))
-genClosedDAG = sized $ \s -> genDAG True (s*20) []
+genClosedDAG :: (Constructors f, Traversable f) => Gen (DAG (Binding :+: f))
+genClosedDAG = sized $ \s -> genDAG True (s*20) [] []
 
 -- | Generate a possibly open term with many 'Let' binders
-genOpenDAG :: (Constructors f, Traversable f) => Gen (Term (Binding :+: Let :+: f))
-genOpenDAG = sized $ \s -> genDAG False (s*20) []
+genOpenDAG :: (Constructors f, Traversable f) => Gen (DAG (Binding :+: f))
+genOpenDAG = sized $ \s -> genDAG False (s*20) [] []
 
 -- | Like 'genClosedDAG' but with a higher chance of having several let binders at the top
-genClosedDAGTop :: (Constructors f, Traversable f) => Gen (Term (Binding :+: Let :+: f))
-genClosedDAGTop = sized $ \s -> choose (0,15) >>= genLets False (s*20) []
+genClosedDAGTop :: (Constructors f, Traversable f) => Gen (DAG (Binding :+: f))
+genClosedDAGTop = sized $ \s -> choose (0,15) >>= genLets False (s*20) [] []
 
 -- | Like 'genOpenDAG' but with a higher chance of having several let binders at the top
-genOpenDAGTop :: (Constructors f, Traversable f) => Gen (Term (Binding :+: Let :+: f))
-genOpenDAGTop = sized $ \s -> choose (0,15) >>= genLets False (s*20) []
+genOpenDAGTop :: (Constructors f, Traversable f) => Gen (DAG (Binding :+: f))
+genOpenDAGTop = sized $ \s -> choose (0,15) >>= genLets False (s*20) [] []
 
 -- | Like 'genOpenDAGTop' but generate also an environment of definitions which the term may use
-genDAGEnv :: (Constructors f', Traversable f', Binding :<: f, Let :<: f, f ~ (Binding :+: Let :+: f')) => Gen (Defs f, Term f)
+genDAGEnv :: (Constructors f', Traversable f', Binding :<: f, f ~ (Binding :+: f')) => Gen (Defs f, DAG f)
 genDAGEnv = do
     t <- fmap renameUnique genOpenDAGTop  -- TODO Renaming only needed for prop_expose; remove later
     let (ds, Term f) = splitDefs t
