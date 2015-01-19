@@ -1,16 +1,13 @@
--- | Utilities for working with abstract syntax trees with sharing
+-- | Utilities for working with abstract syntax trees with \"transparent\" sharing
 --
--- The type 'DAG' represents ASTs with sharing. It is essentially a normal term with let
--- binders; however, instead of 'Let', this module uses a functor transformer 'Where' that allows
--- attaching a number of local definitions to each node in an AST.
+-- The type 'DAG' represents ASTs with sharing. It is essentially a normal term with let binders.
+-- But instead of using 'Let', this module uses a functor transformer 'DAGF' that allows adds a
+-- special kind of let binding 'DLet' and a corresponding variable 'DVar' constructor.
 --
--- The functions 'dagToTerm' and 'termToDAG' go back and forth between terms with 'Where' and 'Let'
--- for local binders.
---
--- It is often desired to ignore the sharing structure when transforming 'DAG's. The sharing
--- structure is then only there to give a compact representation, and should not affect the
--- semantics of the term. Such transformations can be written using 'expose', which looks through
--- the sharing structure and exposes the top-most constructor for pattern matching.
+-- It is sometimes desired to ignore the sharing structure when traversing or transforming 'DAG's.
+-- The sharing structure is then only there to give a compact representation, and should not affect
+-- the semantics of the traversal or transformation. The functions 'foldDAG' and 'expose' support
+-- this kind of programming by dealing with sharing under the hood.
 
 module Language.Embedded.Sharing where
 
@@ -28,7 +25,7 @@ import Language.Embedded
 
 
 
--- | Variable name
+-- | 'DAG' variable name
 newtype DName = DName Integer
   deriving (Eq, Ord, Num, Enum, Real, Integral)
 
@@ -76,14 +73,14 @@ instance (f :<<: g) => f :<<: DAGF g
 -- | Terms with sharing
 type DAG f = Term (DAGF f)
 
--- | Fold a 'DAG'
--- The semantics is as if all bindings were inlined, but the implementation only visits each node in
--- the 'DAG' once. The 'DAG' is assumed to be closed.
+-- | Fold a 'DAG' without exposing the sharing structure. The semantics is as if all bindings were
+-- inlined, but the implementation only visits each node in the 'DAG' once. The 'DAG' is assumed not
+-- to have any free 'DVar'.
 --
--- It may not be a good idea to use 'foldDAG' to transform terms, since the substitution of shared
--- terms does not deal with capturing (only a problem when there are other binders than `Let` in the
--- term). E.g. @`foldDAG` `Term`@ will inline all shared terms, but will generally not preserve the
--- semantics.
+-- It is probably not a good idea to use 'foldDAG' to transform terms, since the substitution of
+-- shared terms does not deal with capturing (only a problem when there are other binders than `Let`
+-- in the term). E.g. @`foldDAG` `Term`@ will inline all shared terms, but will generally not
+-- preserve the semantics.
 foldDAG :: Functor f => (f a -> a) -> DAG f -> a
 foldDAG alg = go []
   where
@@ -112,7 +109,7 @@ inlineDAGEnv env re (Term (DIn f))
     = Term $ back $ Lam v'' $ inlineDAGEnv env re' a
 inlineDAGEnv env re (Term (DIn f)) = Term $ fmap (inlineDAGEnv env re) f
 
--- | Inline all let bindings
+-- | Capture-avoiding inlining of all let bindings
 --
 -- Uses the "rapier" method described in "Secrets of the Glasgow Haskell Compiler inliner" (Peyton
 -- Jones and Marlow, JFP 2006) to rename variables where there's risk for capturing.
@@ -130,13 +127,13 @@ inlineDAG t = inlineDAGEnv [] init t
 type Defs f = [(DName, DAG f)]
 
 -- | Add a number of local binders to a term. Existing binders shadow and may depend on the new
--- ones. This function is the left inverse of 'splitDefs'.
+-- ones. @`uncurry` `addDefs`@ is the left inverse of 'splitDefs'.
 addDefs :: Functor f => Defs f -> DAG f -> DAG f
 addDefs []         t = t
 addDefs ((v,a):ds) t = addDefs ds $ Term $ DLet v a t
 
 -- | Gather all let bindings at the root of a term. The result is the local definitions and the
--- first non-let node. 'addDefs' is the left inverse of this function.
+-- first non-let node. @`uncurry` `addDefs`@ is the left inverse of this function.
 splitDefs :: Functor f => DAG f -> (Defs f, DAG f)
 splitDefs = go []
   where
@@ -146,11 +143,10 @@ splitDefs = go []
 -- | Expose the top-most constructor in a 'DAG' given an environment of definitions in scope. It
 -- works roughly as follows:
 --
--- * 'DLet' binders at the top are gathered in a list of local definitions.
+-- * 'DLet' binders at the top are removed and gathered in a list of local definitions.
 --
 -- * If the top-most node (after removing local definitions) is a 'DVar' variable, its unfolding
---   (coming either in the environment or from the local bindings at the top of the node) is
---   returned and 'expose'd.
+--   (coming either in the environment or from the local definitions) is returned and 'expose'd.
 --
 -- * Otherwise, the local definitions of the node are distributed down to the children, which
 --   ensures that the (call-by-name) semantics of the 'DAG' is not affected.
