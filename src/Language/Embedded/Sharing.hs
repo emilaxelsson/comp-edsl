@@ -39,10 +39,6 @@ toDName (Name n) = DName n
 fromDName :: DName -> Name
 fromDName (DName n) = Name n
 
--- | Environment for let-bound variables
-type DAGEnv a = [(DName,a)]
-  -- TODO Use a map
-
 -- | Extend a base functor with variables and let bindings
 data DAGF f a
     = DVar DName
@@ -95,7 +91,7 @@ unusedName :: [Name] -> Name
 unusedName [] = 0
 unusedName ns = maximum ns + 1
 
-inlineDAGEnv :: (Binding :<<: f, Functor f) => DAGEnv (Term f) -> Renaming -> DAG f -> Term f
+inlineDAGEnv :: (Binding :<<: f, Functor f) => [(DName, Term f)] -> Renaming -> DAG f -> Term f
 inlineDAGEnv env re (Term (DVar v)) = fromJust $ lookup v env
 inlineDAGEnv env re (Term (DLet v a b)) = inlineDAGEnv ((v, inlineDAGEnv env re a) : env) re b
 inlineDAGEnv env re (Term (DIn f))
