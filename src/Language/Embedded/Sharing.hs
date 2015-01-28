@@ -148,18 +148,27 @@ splitDefs = go []
 --   ensures that the (call-by-name) semantics of the 'DAG' is not affected.
 --
 -- When calling @`expose` env t@, it is assumed that @`addDefs` env t@ does not have any free 'DVar'
--- variables.
-expose :: Traversable f => Defs f -> DAG f -> f (DAG f)
+-- variables. It is also assumed that all definitions in `env` have unique names (i.e. that
+-- @map fst env@ has no duplicates).
+expose :: (Binding :<<: f, Traversable f) => Defs f -> DAG f -> f (DAG f)
 expose env t
     | DVar v <- f
-    , let ds'  = dropWhile ((v /=) . fst) ds  -- Strip irrelevant bindings from `ds`
-    , Just t  <- lookup v (ds' ++ env)        -- `ds` shadows `env`
-    , let ds'' = drop 1 ds'                   -- The part of `ds` that `t` may depend on
-    = expose env $ addDefs ds'' t
+    , Just t' <- lookup v (ds ++ env)  -- `ds` shadows `env`
+    , let ds' = drop 1 $ dropWhile ((v /=) . fst) ds  -- The part of `ds` that `t'` may depend on
+        -- It is important to throw away the first part of `ds` because otherwise those bindings can
+        -- capture variables in `t'`. (If `v` is found in `env` rather than in `ds`, there could
+        -- also be definitions in the first part of `env` that capture variables in `t'`, but this
+        -- won't happen due to the assumption that `env` has unique identifiers (and this is the
+        -- reason why we need that assumption).)
+    = expose env $ addDefs ds' t'
         -- TODO This is a bit inefficient because `expose` will immediately apply `splitDefs`
     | DIn g <- f
+    , Just (Lam v a, back) <- prjInj g
+    = back $ Lam v $ addDefs ds a
+        -- TODO Need to rename `v`
+    | DIn g <- f
     = fmap (addDefs ds) g
-      -- `splitDefs` cannot return `DLet`, so we don't need to handle that case
+        -- `splitDefs` cannot return `DLet`, so we don't need to handle that case
   where
     (ds, Term f) = splitDefs t
 

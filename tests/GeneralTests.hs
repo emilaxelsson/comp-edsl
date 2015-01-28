@@ -120,8 +120,8 @@ prop_splitDefs_addDefs =
 -- | 'expose' does not change the call-by-name semantics
 prop_expose =
     forAll genDAGEnv $ \(env, t :: DAG (Binding :+: Construct)) ->
-      uniqueDefs env ==>
-          (inlineDAG (addDefs env $ Term $ DIn $ expose env t) `alphaEq` inlineDAG (addDefs env t))
+      uniqueDefs env ==>  -- TODO This requirement rules out long environments
+        (inlineDAG (addDefs env $ Term $ DIn $ expose env t) `alphaEq` inlineDAG (addDefs env t))
   where
     uniqueDefs ds = vs == nub vs
       where
