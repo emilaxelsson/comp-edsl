@@ -41,7 +41,7 @@ import Language.Embedded.Syntax
 data Construct a = Construct String [a]
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-derive [makeEqF] [''Construct]
+derive [makeEqF,makeOrdF] [''Construct]
 
 instance ShowF Construct
   where
@@ -61,7 +61,7 @@ data Binding a
     | Lam Name a  -- ^ Lambda binding
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-derive [makeEqF, makeShowConstr] [''Binding]
+derive [makeEqF,makeOrdF,makeShowConstr] [''Binding]
 
 showVar :: Name -> String
 showVar v = 'v' : show v
@@ -117,7 +117,7 @@ lam f = inject $ Lam n body
 data App a = App a a
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-derive [makeEqF, makeShowF, makeShowConstr] [''App]
+derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''App]
 
 instance Render  App
 instance HasVars App v
@@ -126,7 +126,7 @@ instance HasVars App v
 data Let a = Let a a
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-derive [makeEqF, makeShowF, makeShowConstr] [''Let]
+derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''Let]
 
 instance Render Let
   where
@@ -193,7 +193,7 @@ instance HasVars (Lit t) v
 data Cond a = Cond a a a
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-derive [makeEqF, makeShowF, makeShowConstr] [''Cond]
+derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''Cond]
 
 instance Render  Cond
 instance HasVars Cond v
