@@ -64,7 +64,6 @@ library
     TypeOperators
 
   other-extensions:
-    ImplicitParams
     NoMonomorphismRestriction
     OverlappingInstances
     TemplateHaskell
