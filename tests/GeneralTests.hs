@@ -11,6 +11,7 @@ import Data.Maybe
 import qualified Data.Set as Set
 
 import Test.Tasty
+import Test.Tasty.Options
 import Test.Tasty.QuickCheck
 import Test.Tasty.TH
 
@@ -127,8 +128,17 @@ prop_expose =
       where
         vs = map fst ds
 
--- Test a single property:
+-- Test a single property
 qc = defaultMain . testProperty "single test"
+
+-- Run n tests
+qcN n = defaultMain . localOption (n :: QuickCheckTests) . testProperty "single test"
+
+-- Test with a specific seed
+-- (e.g. "89 TFGenR F6F9D6562721E71F7FC871776E0A9072E97E1E864F914DC45FE351F5BB373BAF 0 1125899906842623 50 0")
+qcSeed seed = defaultMain . localOption opt . testProperty "single test"
+  where
+    Just opt = parseValue seed :: Maybe QuickCheckReplay
 
 main = $defaultMainGenerator
 
