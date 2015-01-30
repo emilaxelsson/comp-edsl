@@ -30,11 +30,12 @@ import Data.TypeRep hiding ((:+:), Project (..), (:<:) (..))
 
 import Language.Embedded.Syntax
 import Language.Embedded.Constructs
+import Language.Embedded.Environment
 
 
 
 -- | Run-time environment (the values of variables in scope)
-type RunEnv t = [(Name, Dynamic t)]
+type RunEnv t = Env (Dynamic t)
 
 -- | Compiled expression
 --
@@ -51,7 +52,7 @@ data CExp t where
 -- are taken to be the types of @a@ and @b@ (in that order).
 --
 -- The second argument gives the types of variables in scope.
-type Compiler t = [E (TypeRep t)] -> [(Name, E (TypeRep t))] -> Maybe (CExp t)
+type Compiler t = [E (TypeRep t)] -> Env (E (TypeRep t)) -> Maybe (CExp t)
 
 -- | Algebra for compiling expressions
 class Compile f t
@@ -60,7 +61,7 @@ class Compile f t
 
 -- | Typed compilation
 compile :: forall f t . (Compile f t, Traversable f) =>
-    [(Name, E (TypeRep t))] -> Term f -> Maybe (CExp t)
+    Env (E (TypeRep t)) -> Term f -> Maybe (CExp t)
 compile cenv t = cata compileAlg t [] cenv
 
 -- | Evaluate a term using typed compilation
@@ -73,20 +74,20 @@ evalTop :: forall f t a
        , TypeEq t t
        )
     => Proxy t -> Term f -> a
-evalTop _ e = go e typeRep []
+evalTop _ e = go e typeRep emptyEnv
   where
     go :: Term f -> TypeRep t b -> RunEnv t -> b
     go (Term f) t env  -- This case handles top-level lambdas
         | Just (Lam v b) <- prj f
         , [E ta, E tb]   <- matchCon t
         , Just Dict      <- typeEq t (funType ta tb)
-        = \a -> go b tb ((v, Dyn ta a) : env)
+        = \a -> go b tb ((v, Dyn ta a) |> env)
     go e te env
         | Just (CExp t c) <- compile env' e
         , Just Dict       <- typeEq t te
         = c env
       where
-        env' = [(v, E t) | (v, Dyn t _) <- env]
+        env' = fmap (\(Dyn t _) -> E t) env
 
 -- | General implementation of 'compileAlg' for construct of type @A -> B@
 compileAlg_A_B :: forall t a b . (TypeEq t t, Typeable t a, Typeable t b) =>
@@ -147,15 +148,15 @@ instance (Compile f t, Compile g t) => Compile (f :+: g) t
 instance (FunType S.:<: t, TypeEq t t) => Compile Binding t
   where
     compileAlg (Var v) _ cenv = do
-        E t <- lookup v cenv
+        E t <- lookEnv v cenv
         return $ CExp t $ \env -> fromJust $ do
-            Dyn t' a <- lookup v env
+            Dyn t' a <- lookEnv v env
             Dict     <- typeEq t t'
             return a
     compileAlg (Lam v b) (E t : aenv) cenv = do
-        CExp tb b' <- b aenv ((v, E t) : cenv)
+        CExp tb b' <- b aenv ((v, E t) |> cenv)
         return $ CExp (funType t tb) $
-            \env -> \a -> b' ((v, Dyn t a):env)
+            \env -> \a -> b' ((v, Dyn t a) |> env)
 
 instance (FunType S.:<: t, TypeEq t t) => Compile Let t
   where

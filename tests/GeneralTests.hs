@@ -82,10 +82,10 @@ prop_parSubst =
       let fv = Set.toList (freeVars t)
       in  not (null fv) ==>
             forAll (replicateM (length fv) genOpen) $ \(ss :: [Term TestSig]) ->
-              let sub       = zip fv ss
+              let sub       = fromListEnv $ zip fv ss
                   t'        = parSubst sub t
                   Just sub' = match t t'
-              in  Map.fromList sub == Map.fromList sub'
+              in  sub == Map.fromList sub'
 
 prop_matchRefl = forAll genOpen $ \(t :: Term TestSig) -> isJust (match t t)
 
