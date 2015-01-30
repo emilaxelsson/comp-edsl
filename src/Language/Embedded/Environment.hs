@@ -13,9 +13,11 @@ import Data.Syntactic.Functional (Name (..))
 -- | Environment with information about variables in scope
 type Env a = Map Name a
 
+-- | Empty environment
 emptyEnv :: Env a
 emptyEnv = empty
 
+-- | Environment with a single mapping
 singleEnv :: Name -> a -> Env a
 singleEnv = Map.singleton
 
@@ -23,6 +25,7 @@ singleEnv = Map.singleton
 insEnv :: Name -> a -> Env a -> Env a
 insEnv = insert
 
+-- | Insert a mapping into an environment
 (|>) :: (Name,a) -> Env a -> Env a
 (v,a) |> env = insEnv v a env
 
