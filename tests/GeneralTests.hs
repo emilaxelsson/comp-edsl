@@ -111,7 +111,7 @@ prop_inlineDAG = forAll genOpenDAG $ \(t :: DAG (Binding :+: Construct)) ->
 prop_splitDefs_removes_lets =
     forAll genOpenDAGTop $ \(t :: DAG (Binding :+: Construct)) ->
       case unTerm $ snd $ splitDefs t of
-          DLet _ _ _ -> False
+          Inl (DLet _ _ _) -> False
           _ -> True
 
 prop_splitDefs_addDefs =
@@ -122,7 +122,7 @@ prop_splitDefs_addDefs =
 prop_expose =
     forAll genDAGEnv $ \(env, t :: DAG (Binding :+: Construct)) ->
       uniqueDefs env ==>  -- TODO This requirement rules out long environments
-        (inlineDAG (addDefs env $ Term $ DIn $ expose env t) `alphaEq` inlineDAG (addDefs env t))
+        (inlineDAG (addDefs env $ Term $ Inr $ expose env t) `alphaEq` inlineDAG (addDefs env t))
   where
     uniqueDefs ds = vs == nub vs
       where

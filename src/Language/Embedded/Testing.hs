@@ -27,14 +27,14 @@ c1 a       = inject $ Construct "c1" [a]
 c2 a b     = inject $ Construct "c2" [a,b]
 c3 a b c   = inject $ Construct "c3" [a,b,c]
 
-ddvar_      = Term . DVar
-dlet_ v a b = Term $ DLet v a b
-dvar_       = Term . DIn . inj . Var
-dlam_ v     = Term . DIn . inj . Lam v
-d0          = Term $ DIn $ inj $ Construct "d0" []
-d1 a        = Term $ DIn $ inj $ Construct "d1" [a]
-d2 a b      = Term $ DIn $ inj $ Construct "d2" [a,b]
-d3 a b c    = Term $ DIn $ inj $ Construct "d3" [a,b,c]
+ddvar_      = Term . Inr . DVar
+dlet_ v a b = Term $ Inr $ DLet v a b
+dvar_       = Term . Inl . inj . Var
+dlam_ v     = Term . Inl . inj . Lam v
+d0          = Term $ Inl $ inj $ Construct "d0" []
+d1 a        = Term $ Inl $ inj $ Construct "d1" [a]
+d2 a b      = Term $ Inl $ inj $ Construct "d2" [a,b]
+d3 a b c    = Term $ Inl $ inj $ Construct "d3" [a,b,c]
 
 
 
@@ -173,7 +173,7 @@ genLets closed s denv env n = do
     a <- genDAG closed (s `div` 2) denv env
     v <- pickDVar 1 4 denv
     b <- genLets closed (s `div` 2) (v:denv) env (n-1)
-    return $ Term $ DLet v a b
+    return $ Term $ Inl $ DLet v a b
 
 -- | Generate a term with let binders for sharing
 genDAG
@@ -184,16 +184,16 @@ genDAG
     -> [Name]   -- ^ Variables in scope
     -> Gen (DAG (Binding :+: f))
 genDAG closed 0 denv env = frequency
-    [ (freqDVar, fmap (Term . DVar) $ oneof $ map return denv
+    [ (freqDVar, fmap (Term . Inl . DVar) $ oneof $ map return denv
       )
     , (1, fmap Term
         $ oneof
-        $ map (return . DIn . Inr . fmap (const undefined))
+        $ map (return . Inr . Inr . fmap (const undefined))
         $ filter (null . toList) constructors
       )
     , (freqVar, do
             v <- pickVar 5 freqFree env
-            return $ Term $ DIn $ Inl $ Var v
+            return $ Term $ Inr $ Inl $ Var v
       )
     ]
   where
@@ -202,13 +202,13 @@ genDAG closed 0 denv env = frequency
     freqFree = if closed then 0 else 1
 genDAG closed s denv env = frequency
     [ (2, do
-            c <- oneof $ map (return . DIn . Inr) $ filter (not . null . toList) constructors
+            c <- oneof $ map (return . Inr . Inr) $ filter (not . null . toList) constructors
             let l = length (toList c)
             fmap Term $ traverse (\_ -> genDAG closed (s `div` l) denv env) c
       )
     , (2, do
             v <- pickVar 1 3 env
-            fmap (Term . DIn . Inl . Lam v) $ genDAG closed (s-1) denv (v:env)
+            fmap (Term . Inr . Inl . Lam v) $ genDAG closed (s-1) denv (v:env)
       )
     , (2, do
             n <- choose (1,5)
