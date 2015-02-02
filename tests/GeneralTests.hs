@@ -100,7 +100,7 @@ prop_noMatch =
 prop_foldDAG = forAll genOpenDAG $ \(t :: DAG (Binding :+: Construct)) ->
     foldDAG alg t == cata alg (inlineDAG t)
   where
-    alg = succ . Foldable.sum
+    alg f = succ $ sum $ zipWith (*) (cycle [1,-3]) (Foldable.toList f)
 
 prop_inlineDAG = forAll genOpenDAG $ \(t :: DAG (Binding :+: Construct)) ->
     inlineDAG t `alphaEq` reference t
