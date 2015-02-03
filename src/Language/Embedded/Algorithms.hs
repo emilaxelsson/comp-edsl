@@ -38,6 +38,22 @@ allVars t = Set.fromList [v | Just v <- map (fmap viewBind . prjTerm) $ subterms
 constrEq :: (EqF f, Functor f) => f a -> f a -> Bool
 constrEq a b = eqF (fmap (const ()) a) (fmap (const ()) b)
 
+-- | Renaming of a single free variable in a term
+rename :: (Binding :<<: f, Functor f)
+    => Name    -- ^ Name to replace
+    -> Name    -- ^ New name
+    -> Term f
+    -> Term f
+rename old new (Term f)
+    | Just (Var v, back) <- prjInj f
+    , v == old
+    = Term $ back $ Var new
+rename old new (Term f)
+    | Just (Lam v _) <- prj f
+    , v == old
+    = Term f
+rename old new (Term f) = Term $ fmap (rename old new) f
+
 -- | Environment used by 'alphaEq''
 type AlphaEnv = [(Name,Name)]
 
