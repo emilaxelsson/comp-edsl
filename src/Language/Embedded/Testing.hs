@@ -232,7 +232,7 @@ genOpenDAGTop = sized $ \s -> choose (0,15) >>= genLets False (s*20) [] []
 -- | Like 'genOpenDAGTop' but generate also an environment of definitions which the term may use
 genDAGEnv :: (Constructors f', Traversable f', Binding :<: f, f ~ (Binding :+: f')) => Gen (Defs f, DAG f)
 genDAGEnv = do
-    t <- fmap renameUnique genOpenDAGTop  -- TODO Renaming only needed for prop_expose; remove later
+    t <- genOpenDAGTop
     let (ds, Term f) = splitDefs t
     n <- choose (0, length ds)
     let (ds',env) = splitAt n ds

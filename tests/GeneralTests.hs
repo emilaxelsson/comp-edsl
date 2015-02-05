@@ -122,7 +122,7 @@ prop_splitDefs_addDefs =
 prop_expose =
     forAll genDAGEnv $ \(env, t :: DAG (Binding :+: Construct)) ->
       uniqueDefs env ==>  -- TODO This requirement rules out long environments
-        (inlineDAG (addDefs env $ Term $ Inr $ expose env t) `alphaEq` inlineDAG (addDefs env t))
+        (inlineDAG (addDefs env $ Term $ Inr $ expose (Set.toList $ allVars (addDefs env t)) env t) `alphaEq` inlineDAG (addDefs env t))
   where
     uniqueDefs ds = vs == nub vs
       where
