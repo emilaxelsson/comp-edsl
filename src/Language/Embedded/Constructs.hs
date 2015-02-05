@@ -60,15 +60,10 @@ data Binding a
     | Lam Name a  -- ^ Lambda binding
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-derive [makeEqF,makeOrdF,makeShowConstr] [''Binding]
+derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''Binding]
 
 showVar :: Name -> String
 showVar v = 'v' : show v
-
-instance ShowF Binding
-  where
-    showF (Var v)      = showVar v
-    showF (Lam v body) = "(\\" ++ showVar v ++ " -> "  ++ body ++ ")"
 
 instance Render Binding
   where
