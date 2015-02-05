@@ -21,6 +21,25 @@ import Language.Embedded.Testing
 
 
 
+prop_rename1 w =
+    forAll genOpen $ \(t :: Term TestSig) ->
+      t == rename w w t
+
+prop_rename2 v w =
+    forAll genOpen $ \(t :: Term TestSig) ->
+      not (v `Set.member` freeVars t) ==>
+        t == rename v w t
+
+prop_rename3 v w =
+    forAll genOpen $ \(t :: Term TestSig) ->
+      (v `Set.member` freeVars t) && v/=w ==>
+        t /= rename v w t
+
+prop_rename4 v w =
+    forAll genOpen $ \(t :: Term TestSig) ->
+      not (w `Set.member` allVars t) ==>
+        t == rename w v (rename v w t)
+
 prop_alphaEqRefl = forAll genOpen $ \(t :: Term TestSig) -> alphaEq t t
 
 prop_alphaEqSymm  = forAll genOpen $ \(t :: Term TestSig) ->
