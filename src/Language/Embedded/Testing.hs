@@ -5,6 +5,7 @@ module Language.Embedded.Testing where
 
 
 import Control.Monad
+import Data.Char (isAlphaNum)
 import Data.Foldable (toList)
 import Data.Traversable (traverse)
 import Test.QuickCheck
@@ -20,21 +21,40 @@ import Language.Embedded.Sharing
 -- Debugging API
 ----------------------------------------------------------------------------------------------------
 
-var_       = inject . Var
-lam_ v     = inject . Lam v
-c0         = inject $ Construct "c0" []
-c1 a       = inject $ Construct "c1" [a]
-c2 a b     = inject $ Construct "c2" [a,b]
-c3 a b c   = inject $ Construct "c3" [a,b,c]
+mkVar        = inject . Var
+mkLam v      = inject . Lam v
+mkc0         = inject $ Construct "c0" []
+mkc1 a       = inject $ Construct "c1" [a]
+mkc2 a b     = inject $ Construct "c2" [a,b]
+mkc3 a b c   = inject $ Construct "c3" [a,b,c]
+mkDVar       = inject . DVar
+mkDLet v a b = inject $ DLet v a b
 
-ddvar_      = Term . Inr . DVar
-dlet_ v a b = Term $ Inr $ DLet v a b
-dvar_       = Term . Inl . inj . Var
-dlam_ v     = Term . Inl . inj . Lam v
-d0          = Term $ Inl $ inj $ Construct "d0" []
-d1 a        = Term $ Inl $ inj $ Construct "d1" [a]
-d2 a b      = Term $ Inl $ inj $ Construct "d2" [a,b]
-d3 a b c    = Term $ Inl $ inj $ Construct "d3" [a,b,c]
+
+
+----------------------------------------------------------------------------------------------------
+-- Show that produces valid code
+----------------------------------------------------------------------------------------------------
+
+-- | Convert an arbirary term to a term with 'Construct' nodes
+--
+-- The idea is that showing the resulting term should produce valid Haskell code for the term. The
+-- string for each constructor is obtained from 'ShowConstr' and prepended by @"mk"@. The idea is to
+-- get a term where each node is a call to a \"smart constructor\", assumed to have a name that
+-- starts with @mk@.
+--
+-- For atoms that are not fully alphanumeric strings, parentheses are put around the constructor.
+-- This makes sure that e.g. @`Term` $ `Lam` 2 $ `Term` $ `Var` 2@ gets printed as
+-- @(mkLam 2 (mkVar 2))@.
+toConstr :: (ShowConstr f, Functor f, Foldable f) => Term f -> Term Construct
+toConstr = cata go
+  where
+    go f = Term $ Construct constr as
+      where
+        c      = "mk" ++ showConstr f
+        as     = toList f
+        brack  = not (all isAlphaNum c) && null as
+        constr = if brack then "(" ++ c ++ ")" else c
 
 
 
