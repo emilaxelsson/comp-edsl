@@ -54,19 +54,19 @@ instance Constructors Construct
   where
     constructors = [Construct ("constr" ++ show c) $ replicate c () | c <- [0..3]]
 
--- | Generate a variable name
-genName :: Gen Name
-genName = do
-    Positive v <- arbitrary
-    return (Name v)
+instance Arbitrary Name
+  where
+    arbitrary = do
+        Positive v <- arbitrary
+        return (Name v)
 
 -- | Generate a bound (probability b/(b+f)) or free (probability f/(b+f)) variable
 pickVar :: Int -> Int -> [Name] -> Gen Name
 pickVar _ 0 [] = error "pickVar: no variables in scope"
-pickVar _ _ [] = genName
+pickVar _ _ [] = arbitrary
 pickVar b f env = frequency
     [ (b, oneof $ map return env)
-    , (f, genName)
+    , (f, arbitrary)
     ]
 
 genTerm
