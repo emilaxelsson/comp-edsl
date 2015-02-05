@@ -156,32 +156,28 @@ mutateTerm t
 -- * Generation of 'DAG's
 ----------------------------------------------------------------------------------------------------
 
--- | Generate a bound (probability b/(b+f)) or free (probability f/(b+f)) variable
-pickDVar :: Int -> Int -> [DName] -> Gen DName
-pickDVar b f = fmap toDName . pickVar b f . map fromDName
-
 genLets
     :: (Constructors f, Traversable f)
-    => Bool     -- ^ Only closed terms?
-    -> Int      -- ^ Size
-    -> [DName]  -- ^ Variables in scope
-    -> [Name]   -- ^ Variables in scope
-    -> Int      -- ^ Number of bindings
+    => Bool    -- ^ Only closed terms?
+    -> Int     -- ^ Size
+    -> [Name]  -- ^ Variables in scope
+    -> [Name]  -- ^ Variables in scope
+    -> Int     -- ^ Number of bindings
     -> Gen (DAG (Binding :+: f))
 genLets closed s denv env 0 = genDAG closed s denv env
 genLets closed s denv env n = do
     a <- genDAG closed (s `div` 2) denv env
-    v <- pickDVar 1 4 denv
+    v <- pickVar 1 4 denv
     b <- genLets closed (s `div` 2) (v:denv) env (n-1)
     return $ Term $ Inl $ DLet v a b
 
 -- | Generate a term with let binders for sharing
 genDAG
     :: (Constructors f, Functor f, Traversable f)
-    => Bool     -- ^ Only closed terms?
-    -> Int      -- ^ Size
-    -> [DName]  -- ^ Variables in scope
-    -> [Name]   -- ^ Variables in scope
+    => Bool    -- ^ Only closed terms?
+    -> Int     -- ^ Size
+    -> [Name]  -- ^ Variables in scope
+    -> [Name]  -- ^ Variables in scope
     -> Gen (DAG (Binding :+: f))
 genDAG closed 0 denv env = frequency
     [ (freqDVar, fmap (Term . Inl . DVar) $ oneof $ map return denv

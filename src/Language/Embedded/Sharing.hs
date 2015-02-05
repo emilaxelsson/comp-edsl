@@ -26,24 +26,10 @@ import Language.Embedded
 
 
 
--- | 'DAG' variable name
-newtype DName = DName Integer
-  deriving (Eq, Ord, Num, Enum, Real, Integral)
-
-instance Show DName
-  where
-    show (DName n) = show n
-
-toDName :: Name -> DName
-toDName (Name n) = DName n
-
-fromDName :: DName -> Name
-fromDName (DName n) = Name n
-
 -- | Variables and bindings in a 'DAG'
 data DAGF a
-    = DVar DName
-    | DLet DName a a
+    = DVar Name
+    | DLet Name a a
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''DAGF]
@@ -60,10 +46,11 @@ type DAG f = Term (DAGF :+: f)
 -- in the term). E.g. @`foldDAG` `Term`@ will inline all shared terms, but will generally not
 -- preserve the semantics.
 foldDAG :: Functor f => (f a -> a) -> DAG f -> a
-foldDAG alg = go []
+foldDAG alg = go emptyEnv
   where
-    go env (Term (Inl (DVar v)))     = fromJust $ lookup v env
-    go env (Term (Inl (DLet v a b))) = go ((v, go env a) : env) b
+    go env (Term (Inl (DVar v)))
+      | Just a <- lookEnv v env      = a
+    go env (Term (Inl (DLet v a b))) = go ((v, go env a) |> env) b
     go env (Term (Inr f))            = alg $ fmap (go env) f
 
 type Renaming = [(Name,Name)]
@@ -73,18 +60,20 @@ unusedName :: [Name] -> Name
 unusedName [] = 0
 unusedName ns = maximum ns + 1
 
-inlineDAGEnv :: (Binding :<<: f, Functor f) => [(DName, Term f)] -> Renaming -> DAG f -> Term f
-inlineDAGEnv env re (Term (Inl (DVar v)))     = fromJust $ lookup v env
-inlineDAGEnv env re (Term (Inl (DLet v a b))) = inlineDAGEnv ((v, inlineDAGEnv env re a) : env) re b
+inlineDAGEnv :: (Binding :<<: f, Functor f) => Env (Term f) -> Env Name -> DAG f -> Term f
+inlineDAGEnv env re (Term (Inl (DVar v)))
+    | Just a <- lookEnv v env = a
+inlineDAGEnv env re (Term (Inl (DLet v a b))) =
+    inlineDAGEnv ((v, inlineDAGEnv env re a) |> env) re b
 inlineDAGEnv env re (Term (Inr f))
     | Just (Var v, back) <- prjInj f
-    , Just v'            <- lookup v re
+    , Just v'            <- lookEnv v re
     = Term $ back $ Var v'
 inlineDAGEnv env re (Term (Inr f))
     | Just (Lam v a, back) <- prjInj f
-    , let v'' = unusedName [v' | (_,v') <- re]
-    , let re' = (v,v'') : re
-    = Term $ back $ Lam v'' $ inlineDAGEnv env re' a
+    , let v'  = unusedName [w | (_,w) <- toListEnv re]
+    , let re' = (v,v') |> re
+    = Term $ back $ Lam v' $ inlineDAGEnv env re' a
 inlineDAGEnv env re (Term (Inr f)) = Term $ fmap (inlineDAGEnv env re) f
 
 -- | Capture-avoiding inlining of all let bindings
@@ -92,7 +81,7 @@ inlineDAGEnv env re (Term (Inr f)) = Term $ fmap (inlineDAGEnv env re) f
 -- Uses the "rapier" method described in "Secrets of the Glasgow Haskell Compiler inliner" (Peyton
 -- Jones and Marlow, JFP 2006) to rename variables where there's risk for capturing.
 inlineDAG :: (Binding :<<: f, Functor f, Foldable f) => DAG f -> Term f
-inlineDAG t = inlineDAGEnv [] init t
+inlineDAG t = inlineDAGEnv emptyEnv (fromListEnv init) t
   where
     init = case Set.toList $ freeVars t of
       [] -> []
@@ -102,7 +91,7 @@ inlineDAG t = inlineDAGEnv [] init t
 
 -- | A sequence of local definitions. Earlier definitions may depend on later ones, and earlier
 -- definitions shadow later ones.
-type Defs f = [(DName, DAG f)]
+type Defs f = [(Name, DAG f)]
 
 -- | Add a number of local binders to a term. Existing binders shadow and may depend on the new
 -- ones. @`uncurry` `addDefs`@ is the left inverse of 'splitDefs'.
