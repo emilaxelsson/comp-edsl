@@ -21,35 +21,28 @@ import Language.Embedded.Testing
 
 
 
-prop_rename1 w =
-    forAll genOpen $ \(t :: Term TestSig) ->
-      t == rename w w t
+prop_rename1 w (Open t) = t == rename w w t
 
-prop_rename2 v w =
-    forAll genOpen $ \(t :: Term TestSig) ->
-      not (v `Set.member` freeVars t) ==>
-        t == rename v w t
+prop_rename2 v w (Open t) =
+    not (v `Set.member` freeVars t) ==>
+      t == rename v w t
 
-prop_rename3 v w =
-    forAll genOpen $ \(t :: Term TestSig) ->
-      (v `Set.member` freeVars t) && v/=w ==>
-        t /= rename v w t
+prop_rename3 v w (Open t) =
+    (v `Set.member` freeVars t) && v/=w ==>
+      t /= rename v w t
 
-prop_rename4 v w =
-    forAll genOpen $ \(t :: Term TestSig) ->
-      not (w `Set.member` allVars t) ==>
-        t == rename w v (rename v w t)
+prop_rename4 v w (Open t) =
+    not (w `Set.member` allVars t) ==>
+      t == rename w v (rename v w t)
 
-prop_alphaEqRefl = forAll genOpen $ \(t :: Term TestSig) -> alphaEq t t
+prop_alphaEqRefl (Open t) = alphaEq t t
 
-prop_alphaEqSymm  = forAll genOpen $ \(t :: Term TestSig) ->
+prop_alphaEqSymm (Open t) =
     let left  = alphaEq t (shiftVars t)
         right = alphaEq (shiftVars t) t
     in  collect left (left == right)
 
-prop_notAlphaEq =
-    forAll genOpen $ \t ->
-      forAll (mutateTerm t) $ \tm -> not (alphaEq t tm)
+prop_notAlphaEq (Open t) = forAll (mutateTerm t) $ \tm -> not (alphaEq t tm)
 
 -- Check alphaEq for terms that are almost equivalent, but where one has shadowing
 prop_alphaEqShadow = not (alphaEq t1 t2) && not (alphaEq t2 t1)
@@ -58,10 +51,10 @@ prop_alphaEqShadow = not (alphaEq t1 t2) && not (alphaEq t2 t1)
     t1 = mkLam 0 $ mkc2 (mkLam 1 $ mkVar 1) (mkLam 4 $ mkLam 3 $ mkLam 5 $ mkVar 4)
     t2 = mkLam 0 $ mkc2 (mkLam 1 $ mkVar 1) (mkLam 2 $ mkLam 3 $ mkLam 2 $ mkVar 2)
 
-prop_freeVars = forAll genClosed $ \(t :: Term TestSig) -> Set.null $ freeVars t
+prop_freeVars (Closed t) = Set.null $ freeVars t
 
-prop_usedVars = forAll genOpen $ \(t :: Term TestSig) -> Set.isSubsetOf (freeVars t) (usedVars t)
-prop_allVars  = forAll genOpen $ \(t :: Term TestSig) -> Set.isSubsetOf (usedVars t) (allVars t)
+prop_usedVars (Open t) = Set.isSubsetOf (freeVars t) (usedVars t)
+prop_allVars  (Open t) = Set.isSubsetOf (usedVars t) (allVars t)
 
 -- Generate a finite sorted list of allocated variable names
 genAllocs = fmap (sort . map Name) $ do
@@ -76,44 +69,41 @@ prop_freshVarsCompact = forAll (fmap nub genAllocs) $ \as ->
     sort (take 100 (as ++ freshVars as)) == [0..99]
 
 -- A term is alpha-equivalent to its unique renaming
-prop_renameUnique  = forAll genOpen $ \(t :: Term TestSig) -> alphaEq t (renameUnique t)
-prop_renameUnique2 = forAll genOpen $ \(t :: Term TestSig) -> alphaEq (renameUnique t) t
+prop_renameUnique  (Open t) = alphaEq t (renameUnique t)
+prop_renameUnique2 (Open t) = alphaEq (renameUnique t) t
 
 -- Renaming does not change the free variables
-prop_renameUniqueFree = forAll genOpen $ \(t :: Term TestSig) ->
-    freeVars t == freeVars (renameUnique t)
+prop_renameUniqueFree (Open t) = freeVars t == freeVars (renameUnique t)
 
 -- Matching a substituted term against the original term yields the expected mapping
-prop_subst =
-    forAll genOpen $ \(t :: Term TestSig) ->
-    let fv = Set.toList (freeVars t)
-    in  not (null fv) ==>
-          forAll genOpen $ \(new :: Term TestSig) ->
-              ( forAll (oneof $ map return fv) $ \v ->
-                  let t'      = subst v new t
-                      Just ms = match t t'
-                  in  and [(w==v && t==new) || (t == inject (Var w)) | (w,t) <- ms]
-              )
+prop_subst (Open t) (Open new) =
+    not (null fv) ==>
+        forAll (oneof $ map return fv) $ \v ->
+          let t'      = subst v new t
+              Just ms = match t t'
+          in  and [(w==v && t==new) || (t == inject (Var w)) | (w,t) <- ms]
+
+  where
+    fv = Set.toList (freeVars t)
 
 -- Matching a substituted term against the original term yields the expected mapping
-prop_parSubst =
-    forAll genOpen $ \(t :: Term TestSig) ->
-      let fv = Set.toList (freeVars t)
-      in  not (null fv) ==>
-            forAll (replicateM (length fv) genOpen) $ \(ss :: [Term TestSig]) ->
-              let sub       = fromListEnv $ zip fv ss
-                  t'        = parSubst sub t
-                  Just sub' = match t t'
-              in  sub == Map.fromList sub'
+prop_parSubst (Open t) =
+    not (null fv) ==>
+        forAll (fmap (map unOpen) $ replicateM (length fv) arbitrary) $ \ss ->
+          let sub       = fromListEnv $ zip fv ss
+              t'        = parSubst sub t
+              Just sub' = match t t'
+          in  sub == Map.fromList sub'
+  where
+    fv = Set.toList (freeVars t)
 
-prop_matchRefl = forAll genOpen $ \(t :: Term TestSig) -> isJust (match t t)
+prop_matchRefl (Open t) = isJust (match t t)
 
-prop_matchRename  = forAll genOpen $ \(t :: Term TestSig) -> isJust (match t (renameUnique t))
-prop_matchRename2 = forAll genOpen $ \(t :: Term TestSig) -> isJust (match (renameUnique t) t)
+prop_matchRename  (Open t) = isJust (match t (renameUnique t))
+prop_matchRename2 (Open t) = isJust (match (renameUnique t) t)
 
-prop_noMatch =
-    forAll genClosed $ \t ->
-      forAll (mutateTerm t) $ \tm -> isNothing (match t tm)
+prop_noMatch (Closed t) =
+    forAll (mutateTerm t) $ \tm -> isNothing (match t tm)
 
 -- 'foldDAG' has the same behavior as 'cata' composed with 'inlineLet'
 prop_foldDAG = forAll genOpenDAG $ \(t :: DAG (Binding :+: Construct)) ->

@@ -112,9 +112,7 @@ instance Arbitrary STerm
 
 instance Arbitrary Name
   where
-    arbitrary = do
-        Positive v <- arbitrary
-        return (Name v)
+    arbitrary = fmap (\(Positive v) -> Name v) arbitrary
 
 -- | Generate a bound (probability b/(b+f)) or free (probability f/(b+f)) variable
 pickVar :: Int -> Int -> [Name] -> Gen Name
@@ -158,15 +156,25 @@ genBind closed s env = frequency
     , (1, genBind closed 0 env)
     ]
 
--- | Generate a possibly open term with many binders and high probability of shadowing
-genClosed :: (Constructors f, Functor f, Traversable f) => Gen (Term (Binding :+: f))
-genClosed = sized $ \s -> genBind True (20*s) []
+newtype Closed = Closed { unClosed :: Term (Binding :+: Construct) }
+  deriving (Eq, Ord)
 
--- | Generate a possibly open term with many binders and high probability of shadowing
-genOpen :: (Constructors f, Functor f, Traversable f) => Gen (Term (Binding :+: f))
-genOpen = sized $ \s -> genBind False (20*s) []
+instance Show Closed where show = show . toConstr . unClosed
+
+instance Arbitrary Closed
+  where
+    arbitrary = sized $ \s -> fmap Closed $ genBind True (20*s) []
 
 -- TODO Implement shrinking
+
+newtype Open = Open { unOpen :: Term (Binding :+: Construct) }
+  deriving (Eq, Ord)
+
+instance Show Open where show = show . toConstr . unOpen
+
+instance Arbitrary Open
+  where
+    arbitrary = sized $ \s -> fmap Open $ genBind False (20*s) []
 
 mutateName :: Name -> Gen Name
 mutateName (Name v) = fmap (Name . (v+) . getPositive) arbitrary
