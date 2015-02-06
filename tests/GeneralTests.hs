@@ -99,11 +99,15 @@ prop_parSubst (Open t) =
 
 prop_matchRefl (Open t) = isJust (match t t)
 
-prop_matchRename  (Open t) = isJust (match t (renameUnique t))
+prop_matchRename1 (Open t) = isJust (match t (renameUnique t))
 prop_matchRename2 (Open t) = isJust (match (renameUnique t) t)
 
-prop_noMatch (Closed t) =
-    forAll (mutateTerm t) $ \tm -> isNothing (match t tm)
+prop_noMatch (Closed t) = forAll (mutateTerm t) $ \tm -> isNothing (match t tm)
+
+prop_ClosedDAG1 (ClosedDAG t)  = Set.null $ freeVars t
+prop_ClosedDAG2 (ClosedDAG t)  = Set.null $ freeDVars t
+prop_OpenDAG    (OpenDAG t)    = Set.null $ freeDVars t
+prop_DAGEnv     (DAGEnv env t) = Set.null $ freeDVars $ addDefs env t
 
 -- 'foldDAG' has the same behavior as 'cata' composed with 'inlineLet'
 prop_foldDAG (OpenDAG t) = foldDAG alg t == cata alg (inlineDAG t)
