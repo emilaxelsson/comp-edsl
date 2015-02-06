@@ -7,6 +7,7 @@ module Language.Embedded.Testing where
 import Control.Monad
 import Data.Char (isAlphaNum)
 import Data.Foldable (toList)
+import qualified Data.Set as Set
 import Data.Traversable (traverse)
 import Test.QuickCheck
 
@@ -156,6 +157,7 @@ genBind closed s env = frequency
     , (1, genBind closed 0 env)
     ]
 
+-- | Closed lambda term
 newtype Closed = Closed { unClosed :: Term (Binding :+: Construct) }
   deriving (Eq, Ord)
 
@@ -165,8 +167,15 @@ instance Arbitrary Closed
   where
     arbitrary = sized $ \s -> fmap Closed $ genBind True (20*s) []
 
--- TODO Implement shrinking
+    shrink (Closed (Term f)) = case f of
+        Inl (Var v)   -> [Closed $ Term $ Inr $ constr []]
+        Inl (Lam v a) -> a' ++ map (Closed . Term . Inl . Lam v . unClosed) (shrink (Closed a))
+          where
+            a' = if v `Set.member` freeVars a then [] else [Closed a]
+        Inr (Construct c as) -> map Closed as ++
+            map (Closed . Term . Inr . constr . map unClosed) (shrink $ map Closed as)
 
+-- | Possibly open lambda term
 newtype Open = Open { unOpen :: Term (Binding :+: Construct) }
   deriving (Eq, Ord)
 
@@ -175,6 +184,12 @@ instance Show Open where show = show . toConstr . unOpen
 instance Arbitrary Open
   where
     arbitrary = sized $ \s -> fmap Open $ genBind False (20*s) []
+
+    shrink (Open (Term f)) = case f of
+        Inl (Var v)   -> [Open $ Term $ Inr $ constr []]
+        Inl (Lam v a) -> Open a : map (Open . Term . Inl . Lam v . unOpen) (shrink (Open a))
+        Inr (Construct c as) -> map Open as ++
+            map (Open . Term . Inr . constr . map unOpen) (shrink $ map Open as)
 
 mutateName :: Name -> Gen Name
 mutateName (Name v) = fmap (Name . (v+) . getPositive) arbitrary
