@@ -47,7 +47,7 @@ prop_notAlphaEq (Open t) = forAll (mutateTerm t) $ \tm -> not (alphaEq t tm)
 -- Check alphaEq for terms that are almost equivalent, but where one has shadowing
 prop_alphaEqShadow = not (alphaEq t1 t2) && not (alphaEq t2 t1)
   where
-    t1 :: Term TestSig
+    t1 :: Term (Binding :+: Construct)
     t1 = mkLam 0 $ mkc2 (mkLam 1 $ mkVar 1) (mkLam 4 $ mkLam 3 $ mkLam 5 $ mkVar 4)
     t2 = mkLam 0 $ mkc2 (mkLam 1 $ mkVar 1) (mkLam 2 $ mkLam 3 $ mkLam 2 $ mkVar 2)
 

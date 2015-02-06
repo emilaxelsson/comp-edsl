@@ -212,10 +212,8 @@ shiftVars = go []
       | Just (Lam v a) <- project t = inject $ Lam (v+1) $ go ((v,v+1):env) a
       | otherwise = Term $ fmap (go env) f
 
-type TestSig = Binding :+: Construct
-
 -- | Mutates a term to get another one that is guaranteed not to be alpha-equivalent
-mutateTerm :: Term TestSig -> Gen (Term TestSig)
+mutateTerm :: Term (Binding :+: Construct) -> Gen (Term (Binding :+: Construct))
 mutateTerm t
     | Just (Var v)          <- project t = fmap (inject . Var) $ mutateName v
     | Just (Lam v a)        <- project t = fmap (inject . Lam v) $ mutateTerm a
