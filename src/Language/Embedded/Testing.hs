@@ -290,26 +290,50 @@ genDAG closed s denv env = frequency
     , (1, genDAG closed 0 denv env)
     ]
 
--- | Generate a closed term with many 'Let' binders
-genClosedDAG :: (Constructors f, Traversable f) => Gen (DAG (Binding :+: f))
-genClosedDAG = sized $ \s -> genDAG True (s*20) [] []
+-- | Closed 'DAG' with lots of sharing
+newtype ClosedDAG = ClosedDAG { unClosedDAG :: DAG (Binding :+: Construct) }
+  deriving (Eq, Ord)
 
--- | Generate a possibly open term with many 'Let' binders
-genOpenDAG :: (Constructors f, Traversable f) => Gen (DAG (Binding :+: f))
-genOpenDAG = sized $ \s -> genDAG False (s*20) [] []
+instance Show ClosedDAG where show = show . toConstr . unClosedDAG
 
--- | Like 'genClosedDAG' but with a higher chance of having several let binders at the top
-genClosedDAGTop :: (Constructors f, Traversable f) => Gen (DAG (Binding :+: f))
-genClosedDAGTop = sized $ \s -> choose (0,15) >>= genLets False (s*20) [] []
+instance Arbitrary ClosedDAG
+  where
+    arbitrary = sized $ \s -> fmap ClosedDAG $ genDAG True (s*20) [] []
 
--- | Like 'genOpenDAG' but with a higher chance of having several let binders at the top
-genOpenDAGTop :: (Constructors f, Traversable f) => Gen (DAG (Binding :+: f))
-genOpenDAGTop = sized $ \s -> choose (0,15) >>= genLets False (s*20) [] []
+-- | Possibly open 'DAG' with lots of sharing
+newtype OpenDAG = OpenDAG { unOpenDAG :: DAG (Binding :+: Construct) }
+  deriving (Eq, Ord)
+
+instance Show OpenDAG where show = show . toConstr . unOpenDAG
+
+instance Arbitrary OpenDAG
+  where
+    arbitrary = sized $ \s -> fmap OpenDAG $ genDAG False (s*20) [] []
+
+-- | Closed 'DAG' with high chance of having several 'DLet' binders at the top
+newtype ClosedDAGTop = ClosedDAGTop { unClosedDAGTop :: DAG (Binding :+: Construct) }
+  deriving (Eq, Ord)
+
+instance Show ClosedDAGTop where show = show . toConstr . unClosedDAGTop
+
+instance Arbitrary ClosedDAGTop
+  where
+    arbitrary = sized $ \s -> choose (0,15) >>= fmap ClosedDAGTop . genLets True (s*20) [] []
+
+-- | Possibly open 'DAG' with high chance of having several 'DLet' binders at the top
+newtype OpenDAGTop = OpenDAGTop { unOpenDAGTop :: DAG (Binding :+: Construct) }
+  deriving (Eq, Ord)
+
+instance Show OpenDAGTop where show = show . toConstr . unOpenDAGTop
+
+instance Arbitrary OpenDAGTop
+  where
+    arbitrary = sized $ \s -> choose (0,15) >>= fmap OpenDAGTop . genLets False (s*20) [] []
 
 -- | Like 'genOpenDAGTop' but generate also an environment of definitions which the term may use
-genDAGEnv :: (Constructors f', Traversable f', Binding :<: f, f ~ (Binding :+: f')) => Gen (Defs f, DAG f)
+genDAGEnv :: (f ~ (Binding :+: Construct)) => Gen (Defs f, DAG f)
 genDAGEnv = do
-    t <- genOpenDAGTop
+    OpenDAGTop t <- arbitrary
     let (ds, Term f) = splitDefs t
     n <- choose (0, length ds)
     let (ds',env) = splitAt n ds

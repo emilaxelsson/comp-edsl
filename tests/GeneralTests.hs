@@ -106,30 +106,25 @@ prop_noMatch (Closed t) =
     forAll (mutateTerm t) $ \tm -> isNothing (match t tm)
 
 -- 'foldDAG' has the same behavior as 'cata' composed with 'inlineLet'
-prop_foldDAG = forAll genOpenDAG $ \(t :: DAG (Binding :+: Construct)) ->
-    foldDAG alg t == cata alg (inlineDAG t)
+prop_foldDAG (OpenDAG t) = foldDAG alg t == cata alg (inlineDAG t)
   where
     alg f = succ $ sum $ zipWith (*) (cycle [1,-3]) (Foldable.toList f)
 
-prop_inlineDAG = forAll genOpenDAG $ \(t :: DAG (Binding :+: Construct)) ->
-    inlineDAG t `alphaEq` reference t
+prop_inlineDAG (OpenDAG t) = inlineDAG t `alphaEq` reference t
   where
     reference = foldDAG Term . renameUnique
       -- `foldDAG Term` is a correct inliner if names are unique
 
-prop_splitDefs_removes_lets =
-    forAll genOpenDAGTop $ \(t :: DAG (Binding :+: Construct)) ->
-      case unTerm $ snd $ splitDefs t of
-          Inl (DLet _ _ _) -> False
-          _ -> True
+prop_splitDefs_removes_lets (OpenDAGTop t) =
+    case unTerm $ snd $ splitDefs t of
+        Inl (DLet _ _ _) -> False
+        _ -> True
 
-prop_splitDefs_addDefs =
-    forAll genOpenDAGTop $ \(t :: DAG (Binding :+: Construct)) ->
-      uncurry addDefs (splitDefs t) == t
+prop_splitDefs_addDefs (OpenDAGTop t) = uncurry addDefs (splitDefs t) == t
 
 -- | 'expose' does not change the call-by-name semantics
 prop_expose =
-    forAll genDAGEnv $ \(env, t :: DAG (Binding :+: Construct)) ->
+    forAll genDAGEnv $ \(env,t) ->
       uniqueDefs env ==>  -- TODO This requirement rules out long environments
         (inlineDAG (addDefs env $ Term $ Inr $ expose (Set.toList $ allVars (addDefs env t)) env t) `alphaEq` inlineDAG (addDefs env t))
   where
