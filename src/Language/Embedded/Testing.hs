@@ -330,12 +330,29 @@ instance Arbitrary OpenDAGTop
   where
     arbitrary = sized $ \s -> choose (0,15) >>= fmap OpenDAGTop . genLets False (s*20) [] []
 
--- | Like 'genOpenDAGTop' but generate also an environment of definitions which the term may use
-genDAGEnv :: (f ~ (Binding :+: Construct)) => Gen (Defs f, DAG f)
-genDAGEnv = do
-    OpenDAGTop t <- arbitrary
-    let (ds, Term f) = splitDefs t
-    n <- choose (0, length ds)
-    let (ds',env) = splitAt n ds
-    return (env, addDefs ds' (Term f))
+-- | A 'DAG' paired with an environment of definitions that are possibly used in the term
+--
+-- If @d = `DAGEnv` env t@, then @`addDefs` env t@ is a 'DAG' with the same properties as
+-- 'OpenDAGTop'.
+data DAGEnv = DAGEnv (Defs (Binding :+: Construct)) (DAG (Binding :+: Construct))
+  deriving (Eq, Ord)
+
+instance Show DAGEnv
+  where
+    show (DAGEnv env t) = unlines
+        [ "--------------------"
+        , "env = " ++ show [(v, toConstr a) | (v,a) <- env]
+        , "--"
+        , "dag = " ++ show (toConstr t)
+        , "--------------------"
+        ]
+
+instance Arbitrary DAGEnv
+  where
+    arbitrary = do
+        OpenDAGTop t <- arbitrary
+        let (ds, Term f) = splitDefs t
+        n <- choose (0, length ds)
+        let (ds',env) = splitAt n ds
+        return $ DAGEnv env $ addDefs ds' (Term f)
 
