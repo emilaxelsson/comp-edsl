@@ -300,6 +300,26 @@ instance Arbitrary ClosedDAG
   where
     arbitrary = sized $ \s -> fmap ClosedDAG $ genDAG True (s*20) [] []
 
+    shrink (ClosedDAG t)
+        | Just (DVar v) <- project t = [ClosedDAG $ inject $ constr []]
+        | Just (Var v)  <- project t = [ClosedDAG $ inject $ constr []]
+
+        | Just (DLet v a b) <- project t
+        = map ClosedDAG $ a
+        : [ inject $ DLet v a' b'
+            | ClosedDAG a' <- shrink (ClosedDAG a)
+            , ClosedDAG b' <- shrink (ClosedDAG b)
+          ]
+            -- TODO Remove the binding if the variable is not used
+
+        | Just (Lam v a) <- project t
+        , let a' = if v `Set.member` freeVars a then [] else [ClosedDAG a]
+        = a' ++ map (ClosedDAG . inject . Lam v . unClosedDAG) (shrink (ClosedDAG a))
+
+        | Just (Construct c as) <- project t
+        = map ClosedDAG as
+          ++ map (ClosedDAG . inject . constr . map unClosedDAG) (shrink $ map ClosedDAG as)
+
 -- | Possibly open 'DAG' with lots of sharing
 newtype OpenDAG = OpenDAG { unOpenDAG :: DAG (Binding :+: Construct) }
   deriving (Eq, Ord)
@@ -310,6 +330,26 @@ instance Arbitrary OpenDAG
   where
     arbitrary = sized $ \s -> fmap OpenDAG $ genDAG False (s*20) [] []
 
+    shrink (OpenDAG t)
+        | Just (DVar v) <- project t = [OpenDAG $ inject $ constr []]
+        | Just (Var v)  <- project t = [OpenDAG $ inject $ constr []]
+
+        | Just (DLet v a b) <- project t
+        = map OpenDAG $ a
+        : [ inject $ DLet v a' b'
+            | OpenDAG a' <- shrink (OpenDAG a)
+            , OpenDAG b' <- shrink (OpenDAG b)
+          ]
+
+            -- TODO Remove the binding if the variable is not used
+
+        | Just (Lam v a) <- project t
+        = OpenDAG a : map (OpenDAG . inject . Lam v . unOpenDAG) (shrink (OpenDAG a))
+
+        | Just (Construct c as) <- project t
+        = map OpenDAG as
+          ++ map (OpenDAG . inject . constr . map unOpenDAG) (shrink $ map OpenDAG as)
+
 -- | Closed 'DAG' with high chance of having several 'DLet' binders at the top
 newtype ClosedDAGTop = ClosedDAGTop { unClosedDAGTop :: DAG (Binding :+: Construct) }
   deriving (Eq, Ord)
@@ -319,6 +359,7 @@ instance Show ClosedDAGTop where show = show . toConstr . unClosedDAGTop
 instance Arbitrary ClosedDAGTop
   where
     arbitrary = sized $ \s -> choose (0,15) >>= fmap ClosedDAGTop . genLets True (s*20) [] []
+    shrink    = map (ClosedDAGTop . unClosedDAG) . shrink . ClosedDAG . unClosedDAGTop
 
 -- | Possibly open 'DAG' with high chance of having several 'DLet' binders at the top
 newtype OpenDAGTop = OpenDAGTop { unOpenDAGTop :: DAG (Binding :+: Construct) }
@@ -329,6 +370,7 @@ instance Show OpenDAGTop where show = show . toConstr . unOpenDAGTop
 instance Arbitrary OpenDAGTop
   where
     arbitrary = sized $ \s -> choose (0,15) >>= fmap OpenDAGTop . genLets False (s*20) [] []
+    shrink    = map (OpenDAGTop . unOpenDAG) . shrink . OpenDAG . unOpenDAGTop
 
 -- | A 'DAG' paired with an environment of definitions that are possibly used in the term
 --
@@ -355,4 +397,24 @@ instance Arbitrary DAGEnv
         n <- choose (0, length ds)
         let (ds',env) = splitAt n ds
         return $ DAGEnv env $ addDefs ds' (Term f)
+
+    shrink (DAGEnv [] t) = map (DAGEnv [] . unOpenDAG) $ shrink $ OpenDAG t
+    shrink (DAGEnv ((v,a):env) t)
+        =  env'
+        ++ [ DAGEnv ((v,a'):env) t | OpenDAG a' <- shrink $ OpenDAG a ]
+        ++ [ DAGEnv ((v,a):env') t' | DAGEnv env' t' <- shrink $ DAGEnv env t ]
+      where
+        env' = if v `Set.member` freeDVars (addDefs env t) then [] else [DAGEnv env t]
+
+-- | Dummy pair type that only shrinks the second component of a pair
+data PP a b = PP a b
+
+instance (Arbitrary a, Arbitrary b) => Arbitrary (PP a b)
+  where
+    arbitrary = do
+        a <- arbitrary
+        b <- arbitrary
+        return $ PP a b
+
+    shrink (PP a b) = map (PP a) $ shrink b
 
