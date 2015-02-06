@@ -14,6 +14,7 @@ module Language.Embedded.Sharing where
 
 
 
+import qualified Data.Foldable as Foldable
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Maybe (fromJust)
@@ -36,6 +37,12 @@ derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''DAGF]
 
 -- | Terms with sharing
 type DAG f = Term (DAGF :+: f)
+
+-- | Find the set of free DAG variables (i.e. 'DVar') in a 'DAG'
+freeDVars :: (Functor f, Foldable f) => DAG f -> Set Name
+freeDVars (Term (Inl (DVar v)))     = Set.singleton v
+freeDVars (Term (Inl (DLet v a b))) = Set.union (freeDVars a) $ Set.delete v $ freeDVars b
+freeDVars (Term f)                  = Foldable.fold $ fmap freeDVars f
 
 -- | Fold a 'DAG' without exposing the sharing structure. The semantics is as if all bindings were
 -- inlined, but the implementation only visits each node in the 'DAG' once. The 'DAG' is assumed not
