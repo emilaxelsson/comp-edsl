@@ -18,7 +18,7 @@ import Language.Embedded.Sharing
 
 
 ----------------------------------------------------------------------------------------------------
--- Debugging API
+-- * Debugging
 ----------------------------------------------------------------------------------------------------
 
 mkVar        = inject . Var
@@ -29,12 +29,6 @@ mkc2 a b     = inject $ Construct "c2" [a,b]
 mkc3 a b c   = inject $ Construct "c3" [a,b,c]
 mkDVar       = inject . DVar
 mkDLet v a b = inject $ DLet v a b
-
-
-
-----------------------------------------------------------------------------------------------------
--- Show that produces valid code
-----------------------------------------------------------------------------------------------------
 
 -- | Convert an arbirary term to a term with 'Construct' nodes
 --
@@ -59,7 +53,7 @@ toConstr = cata go
 
 
 ----------------------------------------------------------------------------------------------------
--- * Generation of untyped lambda terms
+-- * Simple term generation
 ----------------------------------------------------------------------------------------------------
 
 class Constructors f
@@ -70,9 +64,51 @@ instance (Constructors f, Constructors g) => Constructors (f :+: g)
   where
     constructors = map Inl constructors ++ map Inr constructors
 
+constr :: [a] -> Construct a
+constr as = Construct ('c' : show (length as)) as
+
 instance Constructors Construct
   where
-    constructors = [Construct ("constr" ++ show c) $ replicate c () | c <- [0..3]]
+    constructors = [constr $ replicate c () | c <- [0..3]]
+
+instance Constructors App  where constructors = [App () ()]
+instance Constructors Let  where constructors = [Let () ()]
+instance Constructors Cond where constructors = [Cond () () ()]
+
+-- | Generate a random term
+genTerm :: (Constructors f, Traversable f) => Int -> Gen (Term f)
+genTerm 0
+    = fmap Term
+    $ oneof
+    $ map (return . fmap (const undefined))
+    $ filter (null . toList) constructors
+genTerm s = frequency
+    [ (10, do
+            c <- oneof $ map return $ filter (not . null . toList) constructors
+            let l = length (toList c)
+            fmap Term $ traverse (\_ -> genTerm (s `div` l)) c
+      )
+    , (1, genTerm 0)
+    ]
+
+-- | \"Simple term\"
+newtype STerm = STerm { unSTerm :: Term Construct }
+  deriving (Eq, Ord)
+
+instance Show STerm where show = show . toConstr . unSTerm
+
+instance Arbitrary STerm
+  where
+    arbitrary = sized (fmap STerm . genTerm)
+
+    shrink (STerm (Term (Construct c as))) = map STerm as ++
+        map (STerm . Term . constr . map unSTerm) (shrink $ map STerm as)
+
+
+
+----------------------------------------------------------------------------------------------------
+-- * Generation of untyped lambda terms
+----------------------------------------------------------------------------------------------------
 
 instance Arbitrary Name
   where
@@ -89,13 +125,13 @@ pickVar b f env = frequency
     , (f, arbitrary)
     ]
 
-genTerm
+genBind
     :: (Constructors f, Traversable f)
     => Bool    -- ^ Only closed terms?
     -> Int     -- ^ Size
     -> [Name]  -- ^ Variables in scope
     -> Gen (Term (Binding :+: f))
-genTerm closed 0 env = frequency
+genBind closed 0 env = frequency
     [ (1, fmap Term
         $ oneof
         $ map (return . Inr . fmap (const undefined))
@@ -109,26 +145,26 @@ genTerm closed 0 env = frequency
   where
     freqVar  = if closed && null env then 0 else 4
     freqFree = if closed then 0 else 1
-genTerm closed s env = frequency
+genBind closed s env = frequency
     [ (6, do
             c <- oneof $ map (return . Inr) $ filter (not . null . toList) constructors
             let l = length (toList c)
-            fmap Term $ traverse (\_ -> genTerm closed (s `div` l) env) c
+            fmap Term $ traverse (\_ -> genBind closed (s `div` l) env) c
       )
     , (6, do
             v <- pickVar 1 3 env
-            fmap (Term . Inl . Lam v) $ genTerm closed (s-1) (v:env)
+            fmap (Term . Inl . Lam v) $ genBind closed (s-1) (v:env)
       )
-    , (1, genTerm closed 0 env)
+    , (1, genBind closed 0 env)
     ]
 
 -- | Generate a possibly open term with many binders and high probability of shadowing
 genClosed :: (Constructors f, Functor f, Traversable f) => Gen (Term (Binding :+: f))
-genClosed = sized $ \s -> genTerm True (20*s) []
+genClosed = sized $ \s -> genBind True (20*s) []
 
 -- | Generate a possibly open term with many binders and high probability of shadowing
 genOpen :: (Constructors f, Functor f, Traversable f) => Gen (Term (Binding :+: f))
-genOpen = sized $ \s -> genTerm False (20*s) []
+genOpen = sized $ \s -> genBind False (20*s) []
 
 -- TODO Implement shrinking
 
