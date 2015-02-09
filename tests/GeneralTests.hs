@@ -128,7 +128,7 @@ prop_splitDefs_addDefs (OpenDAGTop t) = uncurry addDefs (splitDefs t) == t
 
 -- | 'expose' does not change the call-by-name semantics
 prop_expose (DAGEnv env t) =
-    (inlineDAG (addDefs env $ Term $ Inr $ expose (Set.toList $ allVars (t)) env t) `alphaEq` inlineDAG (addDefs env t))
+    (inlineDAG (addDefs env $ Term $ Inr $ expose (Set.toList $ allVars (addDefs env t)) env t) `alphaEq` inlineDAG (addDefs env t))
 
 -- Test a single property
 qc = defaultMain . testProperty "single test"
