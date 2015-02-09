@@ -17,6 +17,8 @@ module Language.Embedded.Sharing where
 import qualified Data.Foldable as Foldable
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -53,11 +55,11 @@ freeDVars (Term f)                  = Foldable.fold $ fmap freeDVars f
 -- in the term). E.g. @`foldDAG` `Term`@ will inline all shared terms, but will generally not
 -- preserve the semantics.
 foldDAG :: Functor f => (f a -> a) -> DAG f -> a
-foldDAG alg = go emptyEnv
+foldDAG alg = go Map.empty
   where
     go env (Term (Inl (DVar v)))
-      | Just a <- lookEnv v env      = a
-    go env (Term (Inl (DLet v a b))) = go ((v, go env a) |> env) b
+      | Just a <- Map.lookup v env   = a
+    go env (Term (Inl (DLet v a b))) = go (Map.insert v (go env a) env) b
     go env (Term (Inr f))            = alg $ fmap (go env) f
 
 type Renaming = [(Name,Name)]
@@ -67,19 +69,19 @@ unusedName :: [Name] -> Name
 unusedName [] = 0
 unusedName ns = maximum ns + 1
 
-inlineDAGEnv :: (Binding :<<: f, Functor f) => Env (Term f) -> Env Name -> DAG f -> Term f
+inlineDAGEnv :: (Binding :<<: f, Functor f) => Map Name (Term f) -> Map Name Name -> DAG f -> Term f
 inlineDAGEnv env re (Term (Inl (DVar v)))
-    | Just a <- lookEnv v env = a
+    | Just a <- Map.lookup v env = a
 inlineDAGEnv env re (Term (Inl (DLet v a b))) =
-    inlineDAGEnv ((v, inlineDAGEnv env re a) |> env) re b
+    inlineDAGEnv (Map.insert v (inlineDAGEnv env re a) env) re b
 inlineDAGEnv env re (Term (Inr f))
     | Just (Var v, back) <- prjInj f
-    , Just v'            <- lookEnv v re
+    , Just v'            <- Map.lookup v re
     = Term $ back $ Var v'
 inlineDAGEnv env re (Term (Inr f))
     | Just (Lam v a, back) <- prjInj f
-    , let v'  = unusedName [w | (_,w) <- toListEnv re]
-    , let re' = (v,v') |> re
+    , let v'  = unusedName [w | (_,w) <- Map.toList re]
+    , let re' = Map.insert v v' re
     = Term $ back $ Lam v' $ inlineDAGEnv env re' a
 inlineDAGEnv env re (Term (Inr f)) = Term $ fmap (inlineDAGEnv env re) f
 
@@ -88,7 +90,7 @@ inlineDAGEnv env re (Term (Inr f)) = Term $ fmap (inlineDAGEnv env re) f
 -- Uses the "rapier" method described in "Secrets of the Glasgow Haskell Compiler inliner" (Peyton
 -- Jones and Marlow, JFP 2006) to rename variables where there's risk for capturing.
 inlineDAG :: (Binding :<<: f, Functor f, Foldable f) => DAG f -> Term f
-inlineDAG t = inlineDAGEnv emptyEnv (fromListEnv init) t
+inlineDAG t = inlineDAGEnv Map.empty (Map.fromList init) t
   where
     init = case Set.toList $ freeVars t of
       [] -> []

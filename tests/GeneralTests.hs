@@ -90,7 +90,7 @@ prop_subst (Open t) (Open new) =
 prop_parSubst (Open t) =
     not (null fv) ==>
         forAll (fmap (map unOpen) $ replicateM (length fv) arbitrary) $ \ss ->
-          let sub       = fromListEnv $ zip fv ss
+          let sub       = Map.fromList $ zip fv ss
               t'        = parSubst sub t
               Just sub' = match t t'
           in  sub == Map.fromList sub'

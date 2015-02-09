@@ -27,7 +27,6 @@ library
     Language.Embedded
     Language.Embedded.Syntax
     Language.Embedded.Constructs
-    Language.Embedded.Environment
     Language.Embedded.Eval
     Language.Embedded.Algorithms
     Language.Embedded.Sharing

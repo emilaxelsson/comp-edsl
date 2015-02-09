@@ -5,13 +5,14 @@ module Language.Embedded.Algorithms where
 import Control.Monad.State
 import Data.Foldable (Foldable, toList)
 import qualified Data.Foldable as Foldable
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Traversable (traverse)
 
 import Language.Embedded.Syntax
 import Language.Embedded.Constructs
-import Language.Embedded.Environment
 
 
 
@@ -103,18 +104,18 @@ freshVar = do
 -- names as possible. The first argument is a list of reserved names. Reserved names and names of
 -- free variables are not used when renaming bound variables.
 renameUnique' :: (Binding :<<: f, Traversable f) => [Name] -> Term f -> Term f
-renameUnique' vs t = flip evalState fs $ go emptyEnv t
+renameUnique' vs t = flip evalState fs $ go Map.empty t
   where
     fs = freshVars $ Set.toAscList (freeVars t `Set.union` Set.fromList vs)
     go env t@(Term f)
         | Just (Var v, back) <- prjInj f
-        = case lookEnv v env of
+        = case Map.lookup v env of
             Just v' -> return $ Term $ back $ Var v'
             _ -> return t
         | Just (Lam v a, back) <- prjInj f
         = do
             v' <- freshVar
-            a' <- go ((v,v') |> env) a
+            a' <- go (Map.insert v v' env) a
             return $ Term $ back $ Lam v' a'
     go env (Term f) = fmap Term $ traverse (go env) f
 
@@ -130,15 +131,15 @@ renameUnique = renameUnique' []
 -- If the list contains multiple mappings for the same variable, the first one has precedence. Bound
 -- variables may get renamed, even when there is no risk for capturing.
 parSubst :: (Binding :<<: f, Traversable f)
-    => Env (Term f)  -- ^ Substitution
+    => Map Name (Term f)  -- ^ Substitution
     -> Term f
     -> Term f
 parSubst s = transform sub . renameUnique' fvs
   where
-    fvs = concatMap (Set.toList . freeVars . snd) $ toListEnv s
+    fvs = concatMap (Set.toList . freeVars . snd) $ Map.toList s
     sub t
       | Just (Var v') <- prjTerm t
-      , Just new      <- lookEnv v' s
+      , Just new      <- Map.lookup v' s
       = new
     sub t = t
 
@@ -150,7 +151,7 @@ subst :: (Binding :<<: f, Traversable f)
     -> Term f  -- ^ Term to substitute for the variable
     -> Term f  -- ^ Term to substitute in
     -> Term f
-subst v new = parSubst $ singleEnv v new
+subst v new = parSubst $ Map.singleton v new
 
 -- | Pattern matching with alpha equivalence
 --
@@ -163,22 +164,22 @@ match :: (Binding :<<: f, EqF f, Functor f, Foldable f)
     => Term f  -- ^ Pattern
     -> Term f  -- ^ Term
     -> Maybe [(Name, Term f)]
-match = go emptyEnv
+match = go Map.empty
   where
     go env p t
       | Just (Var v) <- prjTerm p
       , Just (Var w) <- prjTerm t
-      , Just v'      <- lookEnv v env
+      , Just v'      <- Map.lookup v env
       , w == v'
       = Just []
     go env p t
       | Just (Var v) <- prjTerm p
-      , Nothing      <- lookEnv v env
+      , Nothing      <- Map.lookup v env
       = Just [(v,t)]
     go env p t
       | Just (Lam v p') <- prjTerm p
       , Just (Lam w t') <- prjTerm t
-      = go ((v,w) |> env) p' t'
+      = go (Map.insert v w env) p' t'
     go env (Term pf) (Term tf)
       | constrEq pf tf
       = fmap concat $ sequence [go env p t | (p,t) <- toList pf `zip` toList tf]
