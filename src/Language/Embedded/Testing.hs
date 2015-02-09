@@ -397,7 +397,7 @@ genEnv :: forall f
     .  (Constructors f, Traversable f)
     => Int -> Gen (Defs (Binding :+: f))
 genEnv s = do
-    n  <- choose (0,s*10)
+    n  <- choose (0,5)
     vs <- fmap nub $ replicateM n $ fmap (\(Positive a) -> a) arbitrary
     go vs []
   where
