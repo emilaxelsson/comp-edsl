@@ -30,9 +30,6 @@ insEnv = Map.insert
 (|>) :: (Name,a) -> Env a -> Env a
 (v,a) |> env = insEnv v a env
 
-(<|>) :: Env a -> Env a -> Env a
-(<|>) = Map.union
-
 -- | Lookup a name in an environment
 lookEnv :: Name -> Env a -> Maybe a
 lookEnv = Map.lookup
