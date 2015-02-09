@@ -168,10 +168,11 @@ instance Arbitrary Closed
     arbitrary = sized $ \s -> fmap Closed $ genBind True (20*s) []
 
     shrink (Closed (Term f)) = case f of
-        Inl (Var v)   -> [Closed $ Term $ Inr $ constr []]
-        Inl (Lam v a) -> a' ++ map (Closed . Term . Inl . Lam v . unClosed) (shrink (Closed a))
+        Inl (Var v)      -> [Closed $ Term $ Inr $ constr []]
+        Inl (Lam v body) ->
+            body' ++ map (Closed . Term . Inl . Lam v . unClosed) (shrink (Closed body))
           where
-            a' = if v `Set.member` freeVars a then [] else [Closed a]
+            body' = if v `Set.member` freeVars body then [] else [Closed body]
         Inr (Construct c as) -> map Closed as ++
             map (Closed . Term . Inr . constr . map unClosed) (shrink $ map Closed as)
 
@@ -305,16 +306,17 @@ instance Arbitrary ClosedDAG
         | Just (Var v)  <- project t = [ClosedDAG $ inject $ constr []]
 
         | Just (DLet v a b) <- project t
-        = map ClosedDAG $ a
-        : [ inject $ DLet v a' b'
-            | ClosedDAG a' <- shrink (ClosedDAG a)
-            , ClosedDAG b' <- shrink (ClosedDAG b)
-          ]
-            -- TODO Remove the binding if the variable is not used
+        , let b' = if v `Set.member` freeDVars b then [] else [b]
+        = map ClosedDAG
+            $  b'
+            ++ [a]
+            ++ [ inject $ DLet v a' b'
+                  | (ClosedDAG a', ClosedDAG b') <- shrink (ClosedDAG a, ClosedDAG b)
+               ]
 
-        | Just (Lam v a) <- project t
-        , let a' = if v `Set.member` freeVars a then [] else [ClosedDAG a]
-        = a' ++ map (ClosedDAG . inject . Lam v . unClosedDAG) (shrink (ClosedDAG a))
+        | Just (Lam v body) <- project t
+        , let body' = if v `Set.member` freeVars body then [] else [ClosedDAG body]
+        = body' ++ map (ClosedDAG . inject . Lam v . unClosedDAG) (shrink (ClosedDAG body))
 
         | Just (Construct c as) <- project t
         = map ClosedDAG as
@@ -335,13 +337,11 @@ instance Arbitrary OpenDAG
         | Just (Var v)  <- project t = [OpenDAG $ inject $ constr []]
 
         | Just (DLet v a b) <- project t
-        = map OpenDAG $ a
-        : [ inject $ DLet v a' b'
-            | OpenDAG a' <- shrink (OpenDAG a)
-            , OpenDAG b' <- shrink (OpenDAG b)
-          ]
-
-            -- TODO Remove the binding if the variable is not used
+        , let b' = if v `Set.member` freeDVars b then [] else [b]
+        = map OpenDAG
+            $  b'
+            ++ [a]
+            ++ [inject $ DLet v a' b' | (OpenDAG a', OpenDAG b') <- shrink (OpenDAG a, OpenDAG b)]
 
         | Just (Lam v a) <- project t
         = OpenDAG a : map (OpenDAG . inject . Lam v . unOpenDAG) (shrink (OpenDAG a))
@@ -398,23 +398,15 @@ instance Arbitrary DAGEnv
         let (ds',env) = splitAt n ds
         return $ DAGEnv env $ addDefs ds' (Term f)
 
-    shrink (DAGEnv [] t) = map (DAGEnv [] . unOpenDAG) $ shrink $ OpenDAG t
-    shrink (DAGEnv ((v,a):env) t)
-        =  env'
-        ++ [ DAGEnv ((v,a'):env) t | OpenDAG a' <- shrink $ OpenDAG a ]
-        ++ [ DAGEnv ((v,a):env') t' | DAGEnv env' t' <- shrink $ DAGEnv env t ]
+    shrink (DAGEnv env t)
+        =  [ DAGEnv env t' | OpenDAG t' <- shrink $ OpenDAG t ]
+        ++ [ DAGEnv (reverse env') t | env' <- go (reverse env) ]
       where
-        env' = if v `Set.member` freeDVars (addDefs env t) then [] else [DAGEnv env t]
-
--- | Dummy pair type that only shrinks the second component of a pair
-data PP a b = PP a b
-
-instance (Arbitrary a, Arbitrary b) => Arbitrary (PP a b)
-  where
-    arbitrary = do
-        a <- arbitrary
-        b <- arbitrary
-        return $ PP a b
-
-    shrink (PP a b) = map (PP a) $ shrink b
+        go [] = []
+        go ((v,a):env)
+            =  dropBinding
+            ++ [ (v,a'):env | OpenDAG a' <- shrink $ OpenDAG a ]
+            ++ [ (v,a):env' | env' <- go env ]
+          where
+            dropBinding = if v `Set.member` freeDVars (addDefs (reverse env) t) then [] else [env]
 
