@@ -413,7 +413,7 @@ instance Arbitrary DAGEnv
   where
     arbitrary = sized $ \s -> do
         env <- genEnv s
-        t   <- genDAG False s [] (map fst env)
+        t   <- genDAG False s (map fst env) []
         return $ DAGEnv env t
 
     shrink (DAGEnv env t)
