@@ -128,12 +128,7 @@ prop_splitDefs_addDefs (OpenDAGTop t) = uncurry addDefs (splitDefs t) == t
 
 -- | 'expose' does not change the call-by-name semantics
 prop_expose (DAGEnv env t) =
-    uniqueDefs env ==>  -- TODO This requirement rules out long environments
-      (inlineDAG (addDefs env $ Term $ Inr $ expose (Set.toList $ allVars (addDefs env t)) env t) `alphaEq` inlineDAG (addDefs env t))
-  where
-    uniqueDefs ds = vs == nub vs
-      where
-        vs = map fst ds
+    (inlineDAG (addDefs env $ Term $ Inr $ expose (Set.toList $ allVars (t)) env t) `alphaEq` inlineDAG (addDefs env t))
 
 -- Test a single property
 qc = defaultMain . testProperty "single test"

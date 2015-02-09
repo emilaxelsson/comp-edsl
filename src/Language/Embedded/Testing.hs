@@ -7,6 +7,7 @@ module Language.Embedded.Testing where
 import Control.Monad
 import Data.Char (isAlphaNum)
 import Data.Foldable (toList)
+import Data.List (nub)
 import qualified Data.Set as Set
 import Data.Traversable (traverse)
 import Test.QuickCheck
@@ -389,14 +390,31 @@ instance Show DAGEnv
         , "--------------------"
         ]
 
+-- | Generate a 'Defs' list
+--
+-- Earlier definitions may depend on later ones. The variables in the list are all distinct.
+genEnv :: forall f
+    .  (Constructors f, Traversable f)
+    => Int -> Gen (Defs (Binding :+: f))
+genEnv s = do
+    n  <- choose (0,s*10)
+    vs <- fmap nub $ replicateM n $ fmap (\(Positive a) -> a) arbitrary
+    go vs []
+  where
+    go :: [Name] -> Defs (Binding :+: f) -> Gen (Defs (Binding :+: f))
+    go []     env = return env
+    go (v:vs) env = do
+        a <- genDAG False (s `div` 4) ns []
+        go vs ((v,a) : env)
+      where
+        ns = map fst env
+
 instance Arbitrary DAGEnv
   where
-    arbitrary = do
-        OpenDAGTop t <- arbitrary
-        let (ds, Term f) = splitDefs t
-        n <- choose (0, length ds)
-        let (ds',env) = splitAt n ds
-        return $ DAGEnv env $ addDefs ds' (Term f)
+    arbitrary = sized $ \s -> do
+        env <- genEnv s
+        t   <- genDAG False s [] (map fst env)
+        return $ DAGEnv env t
 
     shrink (DAGEnv env t)
         =  [ DAGEnv env t' | OpenDAG t' <- shrink $ OpenDAG t ]
