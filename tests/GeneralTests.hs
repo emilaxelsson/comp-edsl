@@ -109,7 +109,7 @@ prop_ClosedDAG2 (ClosedDAG t)  = Set.null $ freeDVars t
 prop_OpenDAG    (OpenDAG t)    = Set.null $ freeDVars t
 prop_DAGEnv     (DAGEnv env t) = Set.null $ freeDVars $ addDefs env t
 
--- 'foldDAG' has the same behavior as 'cata' composed with 'inlineLet'
+-- 'foldDAG' has the same behavior as 'cata' composed with 'inlineDAG'
 prop_foldDAG (OpenDAG t) = foldDAG alg t == cata alg (inlineDAG t)
   where
     alg f = succ $ sum $ zipWith (*) (cycle [1,-3]) (Foldable.toList f)
@@ -119,9 +119,9 @@ prop_inlineDAG (OpenDAG t) = inlineDAG t `alphaEq` reference t
     reference = foldDAG Term . renameUnique
       -- `foldDAG Term` is a correct inliner if names are unique
 
-prop_splitDefs_removes_lets (OpenDAGTop t) =
+prop_splitDefs_removes_Def (OpenDAGTop t) =
     case unTerm $ snd $ splitDefs t of
-        Inl (DLet _ _ _) -> False
+        Inl (Def _ _ _) -> False
         _ -> True
 
 prop_splitDefs_addDefs (OpenDAGTop t) = uncurry addDefs (splitDefs t) == t

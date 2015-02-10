@@ -46,7 +46,7 @@ fromDName (DName n) = Name n
 -- | Variables and bindings in a 'DAG'
 data DAGF a
     = DVar DName
-    | DLet DName a a
+    | Def DName a a
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''DAGF]
@@ -56,25 +56,25 @@ type DAG f = Term (DAGF :+: f)
 
 -- | Find the set of free DAG variables (i.e. 'DVar') in a 'DAG'
 freeDVars :: (Functor f, Foldable f) => DAG f -> Set DName
-freeDVars (Term (Inl (DVar v)))     = Set.singleton v
-freeDVars (Term (Inl (DLet v a b))) = Set.union (freeDVars a) $ Set.delete v $ freeDVars b
-freeDVars (Term f)                  = Foldable.fold $ fmap freeDVars f
+freeDVars (Term (Inl (DVar v)))    = Set.singleton v
+freeDVars (Term (Inl (Def v a b))) = Set.union (freeDVars a) $ Set.delete v $ freeDVars b
+freeDVars (Term f)                 = Foldable.fold $ fmap freeDVars f
 
 -- | Fold a 'DAG' without exposing the sharing structure. The semantics is as if all bindings were
 -- inlined, but the implementation only visits each node in the 'DAG' once. The 'DAG' is assumed not
 -- to have any free 'DVar'.
 --
 -- It is probably not a good idea to use 'foldDAG' to transform terms, since the substitution of
--- shared terms does not deal with capturing (only a problem when there are other binders than `Let`
+-- shared terms does not deal with capturing (only a problem when there are other binders than `Def`
 -- in the term). E.g. @`foldDAG` `Term`@ will inline all shared terms, but will generally not
 -- preserve the semantics.
 foldDAG :: Functor f => (f a -> a) -> DAG f -> a
 foldDAG alg = go Map.empty
   where
     go env (Term (Inl (DVar v)))
-      | Just a <- Map.lookup v env   = a
-    go env (Term (Inl (DLet v a b))) = go (Map.insert v (go env a) env) b
-    go env (Term (Inr f))            = alg $ fmap (go env) f
+      | Just a <- Map.lookup v env  = a
+    go env (Term (Inl (Def v a b))) = go (Map.insert v (go env a) env) b
+    go env (Term (Inr f))           = alg $ fmap (go env) f
 
 type Renaming = [(Name,Name)]
 
@@ -86,7 +86,7 @@ unusedName ns = maximum ns + 1
 inlineDAGEnv :: (Binding :<<: f, Functor f) => Map DName (Term f) -> Map Name Name -> DAG f -> Term f
 inlineDAGEnv env re (Term (Inl (DVar v)))
     | Just a <- Map.lookup v env = a
-inlineDAGEnv env re (Term (Inl (DLet v a b))) =
+inlineDAGEnv env re (Term (Inl (Def v a b))) =
     inlineDAGEnv (Map.insert v (inlineDAGEnv env re a) env) re b
 inlineDAGEnv env re (Term (Inr f))
     | Just (Var v, back) <- prjInj f
@@ -99,7 +99,7 @@ inlineDAGEnv env re (Term (Inr f))
     = Term $ back $ Lam v' $ inlineDAGEnv env re' a
 inlineDAGEnv env re (Term (Inr f)) = Term $ fmap (inlineDAGEnv env re) f
 
--- | Capture-avoiding inlining of all let bindings
+-- | Capture-avoiding inlining of all 'Def' bindings
 --
 -- Uses the "rapier" method described in "Secrets of the Glasgow Haskell Compiler inliner" (Peyton
 -- Jones and Marlow, JFP 2006) to rename variables where there's risk for capturing.
@@ -120,20 +120,20 @@ type Defs f = [(DName, DAG f)]
 -- ones. @`uncurry` `addDefs`@ is the left inverse of 'splitDefs'.
 addDefs :: Functor f => Defs f -> DAG f -> DAG f
 addDefs []         t = t
-addDefs ((v,a):ds) t = addDefs ds $ Term $ Inl $ DLet v a t
+addDefs ((v,a):ds) t = addDefs ds $ Term $ Inl $ Def v a t
 
--- | Gather all let bindings at the root of a term. The result is the local definitions and the
--- first non-let node. @`uncurry` `addDefs`@ is the left inverse of this function.
+-- | Gather all 'Def' bindings at the root of a term. The result is the local definitions and the
+-- first non-'Def' node. @`uncurry` `addDefs`@ is the left inverse of this function.
 splitDefs :: Functor f => DAG f -> (Defs f, DAG f)
 splitDefs = go []
   where
-    go ds (Term (Inl (DLet v a b))) = go ((v,a):ds) b
+    go ds (Term (Inl (Def v a b))) = go ((v,a):ds) b
     go ds t = (ds,t)
 
 -- | Expose the top-most constructor in a 'DAG' given an environment of definitions in scope. It
 -- works roughly as follows:
 --
--- * 'DLet' binders at the top are removed and gathered in a list of local definitions.
+-- * 'Def' binders at the top are removed and gathered in a list of local definitions.
 --
 -- * If the top-most node (after removing local definitions) is a 'DVar' variable, its unfolding
 --   (coming either in the environment or from the local definitions) is returned and 'expose'd.
@@ -162,7 +162,7 @@ expose ns env t
     = back $ Lam w $ addDefs ds $ rename v w a
     | Inr g <- f
     = fmap (addDefs ds) g
-        -- `splitDefs` cannot return `DLet`, so we don't need to handle that case
+        -- `splitDefs` cannot return `Def`, so we don't need to handle that case
   where
     (ds, Term f) = splitDefs t
 

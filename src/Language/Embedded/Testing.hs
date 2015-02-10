@@ -23,14 +23,14 @@ import Language.Embedded.Sharing
 -- * Debugging
 ----------------------------------------------------------------------------------------------------
 
-mkVar        = inject . Var
-mkLam v      = inject . Lam v
-mkc0         = inject $ Construct "c0" []
-mkc1 a       = inject $ Construct "c1" [a]
-mkc2 a b     = inject $ Construct "c2" [a,b]
-mkc3 a b c   = inject $ Construct "c3" [a,b,c]
-mkDVar       = inject . DVar
-mkDLet v a b = inject $ DLet v a b
+mkVar       = inject . Var
+mkLam v     = inject . Lam v
+mkc0        = inject $ Construct "c0" []
+mkc1 a      = inject $ Construct "c1" [a]
+mkc2 a b    = inject $ Construct "c2" [a,b]
+mkc3 a b c  = inject $ Construct "c3" [a,b,c]
+mkDVar      = inject . DVar
+mkDef v a b = inject $ Def v a b
 
 -- | Convert an arbirary term to a term with 'Construct' nodes
 --
@@ -239,7 +239,7 @@ instance Arbitrary DName
   where
     arbitrary = fmap (\(Positive v) -> DName v) arbitrary
 
-genLets
+genDefs
     :: (Constructors f, Traversable f)
     => Bool     -- ^ Only closed terms?
     -> Int      -- ^ Size
@@ -247,14 +247,14 @@ genLets
     -> [Name]   -- ^ Variables in scope
     -> Int      -- ^ Number of bindings
     -> Gen (DAG (Binding :+: f))
-genLets closed s denv env 0 = genDAG closed s denv env
-genLets closed s denv env n = do
+genDefs closed s denv env 0 = genDAG closed s denv env
+genDefs closed s denv env n = do
     a <- genDAG closed (s `div` 2) denv env
     v <- pickVar 1 4 denv
-    b <- genLets closed (s `div` 2) (v:denv) env (n-1)
-    return $ Term $ Inl $ DLet v a b
+    b <- genDefs closed (s `div` 2) (v:denv) env (n-1)
+    return $ Term $ Inl $ Def v a b
 
--- | Generate a term with let binders for sharing
+-- | Generate a 'DAG'
 genDAG
     :: (Constructors f, Functor f, Traversable f)
     => Bool     -- ^ Only closed terms?
@@ -291,7 +291,7 @@ genDAG closed s denv env = frequency
       )
     , (2, do
             n <- choose (1,5)
-            genLets closed s denv env n
+            genDefs closed s denv env n
       )
     , (1, genDAG closed 0 denv env)
     ]
@@ -310,12 +310,12 @@ instance Arbitrary ClosedDAG
         | Just (DVar v) <- project t = [ClosedDAG $ inject $ constr []]
         | Just (Var v)  <- project t = [ClosedDAG $ inject $ constr []]
 
-        | Just (DLet v a b) <- project t
+        | Just (Def v a b) <- project t
         , let b' = if v `Set.member` freeDVars b then [] else [b]
         = map ClosedDAG
             $  b'
             ++ [a]
-            ++ [ inject $ DLet v a' b'
+            ++ [ inject $ Def v a' b'
                   | (ClosedDAG a', ClosedDAG b') <- shrink (ClosedDAG a, ClosedDAG b)
                ]
 
@@ -341,12 +341,12 @@ instance Arbitrary OpenDAG
         | Just (DVar v) <- project t = [OpenDAG $ inject $ constr []]
         | Just (Var v)  <- project t = [OpenDAG $ inject $ constr []]
 
-        | Just (DLet v a b) <- project t
+        | Just (Def v a b) <- project t
         , let b' = if v `Set.member` freeDVars b then [] else [b]
         = map OpenDAG
             $  b'
             ++ [a]
-            ++ [inject $ DLet v a' b' | (OpenDAG a', OpenDAG b') <- shrink (OpenDAG a, OpenDAG b)]
+            ++ [inject $ Def v a' b' | (OpenDAG a', OpenDAG b') <- shrink (OpenDAG a, OpenDAG b)]
 
         | Just (Lam v a) <- project t
         = OpenDAG a : map (OpenDAG . inject . Lam v . unOpenDAG) (shrink (OpenDAG a))
@@ -355,7 +355,7 @@ instance Arbitrary OpenDAG
         = map OpenDAG as
           ++ map (OpenDAG . inject . constr . map unOpenDAG) (shrink $ map OpenDAG as)
 
--- | Closed 'DAG' with high chance of having several 'DLet' binders at the top
+-- | Closed 'DAG' with high chance of having several 'Def' binders at the top
 newtype ClosedDAGTop = ClosedDAGTop { unClosedDAGTop :: DAG (Binding :+: Construct) }
   deriving (Eq, Ord)
 
@@ -363,10 +363,10 @@ instance Show ClosedDAGTop where show = show . toConstr . unClosedDAGTop
 
 instance Arbitrary ClosedDAGTop
   where
-    arbitrary = sized $ \s -> choose (0,15) >>= fmap ClosedDAGTop . genLets True (s*20) [] []
+    arbitrary = sized $ \s -> choose (0,15) >>= fmap ClosedDAGTop . genDefs True (s*20) [] []
     shrink    = map (ClosedDAGTop . unClosedDAG) . shrink . ClosedDAG . unClosedDAGTop
 
--- | Possibly open 'DAG' with high chance of having several 'DLet' binders at the top
+-- | Possibly open 'DAG' with high chance of having several 'Def' binders at the top
 newtype OpenDAGTop = OpenDAGTop { unOpenDAGTop :: DAG (Binding :+: Construct) }
   deriving (Eq, Ord)
 
@@ -374,7 +374,7 @@ instance Show OpenDAGTop where show = show . toConstr . unOpenDAGTop
 
 instance Arbitrary OpenDAGTop
   where
-    arbitrary = sized $ \s -> choose (0,15) >>= fmap OpenDAGTop . genLets False (s*20) [] []
+    arbitrary = sized $ \s -> choose (0,15) >>= fmap OpenDAGTop . genDefs False (s*20) [] []
     shrink    = map (OpenDAGTop . unOpenDAG) . shrink . OpenDAG . unOpenDAGTop
 
 -- | A 'DAG' paired with an environment of definitions that are possibly used in the term
