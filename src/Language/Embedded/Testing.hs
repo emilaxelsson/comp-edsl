@@ -4,17 +4,23 @@ module Language.Embedded.Testing where
 
 
 
+
+import Control.Applicative
 import Control.Monad
 import Data.Char (isAlphaNum)
 import Data.Foldable (toList)
 import Data.List (nub)
 import qualified Data.Set as Set
 import Data.Traversable (traverse)
+import Data.Typeable (Typeable)
 import Test.QuickCheck
+
+import Test.Feat
+import Test.Feat.Enumerate (pay)
 
 import Data.Comp.Ops
 
-import Language.Embedded
+import Language.Embedded hiding (Typeable)
 import Language.Embedded.Sharing
 
 
@@ -95,7 +101,7 @@ genTerm s = frequency
 
 -- | \"Simple term\"
 newtype STerm = STerm { unSTerm :: Term Construct }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Typeable)
 
 instance Show STerm where show = show . toConstr . unSTerm
 
@@ -114,7 +120,8 @@ instance Arbitrary STerm
 
 instance Arbitrary Name
   where
-    arbitrary = fmap (\(Positive v) -> Name v) arbitrary
+--     arbitrary = fmap (\(Positive v) -> Name v) arbitrary
+    arbitrary = fmap Name $ choose (0,5)
 
 -- | Generate a bound (probability b/(b+f)) or free (probability f/(b+f)) variable
 pickVar :: Arbitrary name => Int -> Int -> [name] -> Gen name
@@ -160,7 +167,7 @@ genBind closed s env = frequency
 
 -- | Closed lambda term
 newtype Closed = Closed { unClosed :: Term (Binding :+: Construct) }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Typeable)
 
 instance Show Closed where show = show . toConstr . unClosed
 
@@ -179,7 +186,7 @@ instance Arbitrary Closed
 
 -- | Possibly open lambda term
 newtype Open = Open { unOpen :: Term (Binding :+: Construct) }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Typeable)
 
 instance Show Open where show = show . toConstr . unOpen
 
@@ -298,7 +305,7 @@ genDAG closed s denv env = frequency
 
 -- | Closed 'DAG' with lots of sharing
 newtype ClosedDAG = ClosedDAG { unClosedDAG :: DAG (Binding :+: Construct) }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Typeable)
 
 instance Show ClosedDAG where show = show . toConstr . unClosedDAG
 
@@ -329,7 +336,7 @@ instance Arbitrary ClosedDAG
 
 -- | Possibly open 'DAG' with lots of sharing
 newtype OpenDAG = OpenDAG { unOpenDAG :: DAG (Binding :+: Construct) }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Typeable)
 
 instance Show OpenDAG where show = show . toConstr . unOpenDAG
 
@@ -357,7 +364,7 @@ instance Arbitrary OpenDAG
 
 -- | Closed 'DAG' with high chance of having several 'Def' binders at the top
 newtype ClosedDAGTop = ClosedDAGTop { unClosedDAGTop :: DAG (Binding :+: Construct) }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Typeable)
 
 instance Show ClosedDAGTop where show = show . toConstr . unClosedDAGTop
 
@@ -368,7 +375,7 @@ instance Arbitrary ClosedDAGTop
 
 -- | Possibly open 'DAG' with high chance of having several 'Def' binders at the top
 newtype OpenDAGTop = OpenDAGTop { unOpenDAGTop :: DAG (Binding :+: Construct) }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Typeable)
 
 instance Show OpenDAGTop where show = show . toConstr . unOpenDAGTop
 
@@ -382,7 +389,7 @@ instance Arbitrary OpenDAGTop
 -- If @d = `DAGEnv` env t@, then @`addDefs` env t@ is a 'DAG' with the same properties as
 -- 'OpenDAGTop'.
 data DAGEnv = DAGEnv (Defs (Binding :+: Construct)) (DAG (Binding :+: Construct))
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Typeable)
 
 instance Show DAGEnv
   where
@@ -431,4 +438,60 @@ instance Arbitrary DAGEnv
             ++ [ (v,a):env' | env' <- go env ]
           where
             dropBinding = if v `Set.member` freeRefs (addDefs (reverse env) t) then [] else [env]
+
+
+
+----------------------------------------------------------------------------------------------------
+-- * Enumeration using Feat
+----------------------------------------------------------------------------------------------------
+
+-- | Increase the cost of an enumeration by @n@
+pays :: Int -> Enumerate a -> Enumerate a
+pays n e = iterate pay e !! n
+
+-- | Enumeration space for numbers
+spaceNum :: Num a => Enumerate a
+spaceNum = consts
+    [ pure 0
+    , (+1) <$> spaceNum
+    ]
+
+instance Enumerable Name  where enumerate = spaceNum
+instance Enumerable RName where enumerate = spaceNum
+
+spaceOpen :: Enumerate (Term (Binding :+: Construct))
+spaceOpen = consts
+    [ mkVar <$> enumerate
+    , pays 3 $ mkLam <$> enumerate <*> spaceOpen
+    , pays 3 $ pure mkc0
+    , pays 3 $ mkc1 <$> spaceOpen
+    , pays 3 $ mkc2 <$> spaceOpen <*> spaceOpen
+    ]
+
+-- | Enumeration space for 'DAG's
+spaceDAG :: Enumerate (DAG (Binding :+: Construct))
+spaceDAG = consts
+    [ mkRef <$> enumerate
+    , pays 3 $ mkDef <$> enumerate <*> spaceDAG <*> spaceDAG
+    , mkVar <$> enumerate
+    , pays 3 $ mkLam <$> enumerate <*> spaceDAG
+    , pays 3 $ pure mkc0
+    , pays 3 $ mkc1 <$> spaceDAG
+    , pays 3 $ mkc2 <$> spaceDAG <*> spaceDAG
+    ]
+
+-- | Enumeration space for a list of 'DAG's
+spaceDAGs :: Enumerate [DAG (Binding :+: Construct)]
+spaceDAGs = consts
+    [ pure []
+    , pays 3 $ (:) <$> spaceDAG <*> spaceDAGs
+    ]
+
+instance Enumerable Open    where enumerate = fmap Open spaceOpen
+instance Enumerable OpenDAG where enumerate = fmap OpenDAG spaceDAG
+instance Enumerable DAGEnv  where enumerate = liftA2 DAGEnv (fmap (zip [0..]) spaceDAGs) spaceDAG
+
+-- | Uniform QuickCheck generator for 'DAGEnv'
+genDAGEnv :: Gen DAGEnv
+genDAGEnv = sized (uniform . (`div` 4))
 
