@@ -131,6 +131,17 @@ splitDefs = go []
     go ds (Term (Inl (Def v a b))) = go ((v,a):ds) b
     go ds t = (ds,t)
 
+type DefsFV f = (Set Name, Defs f)
+
+(<++>) :: DefsFV f -> DefsFV f -> DefsFV f
+(fvs1,ds1) <++> (fvs2,ds2) = (Set.union fvs1 fvs2, ds1 ++ ds2)
+
+defFV :: (Binding :<<: f, Functor f, Foldable f) => RName -> DAG f -> DefsFV f
+defFV v t = (freeVars t, [(v,t)])
+
+freeVarsDefs :: (Binding :<<: f, Functor f, Foldable f) => Defs f -> Set Name
+freeVarsDefs = Set.unions . map (freeVars . snd)
+
 -- | Expose the top-most constructor in a 'DAG' given an environment of definitions in scope. It
 -- works roughly as follows:
 --
@@ -145,8 +156,8 @@ splitDefs = go []
 -- When calling @`expose` env t@, it is assumed that @`addDefs` env t@ does not have any free 'Ref'
 -- variables. It is also assumed that all definitions in `env` have unique names (i.e. that
 -- @map fst env@ has no duplicates).
-expose :: (Binding :<<: f, Traversable f) => [Name] -> Defs f -> DAG f -> f (DAG f)
-expose ns env t
+expose :: (Binding :<<: f, Traversable f) => Defs f -> DAG f -> f (DAG f)
+expose env t
     | Inl (Ref v) <- f
     , Just t' <- lookup v (ds ++ env)  -- `ds` shadows `env`
     , let ds' = drop 1 $ dropWhile ((v /=) . fst) ds  -- The part of `ds` that `t'` may depend on
@@ -155,11 +166,11 @@ expose ns env t
         -- also be definitions in the first part of `env` that capture variables in `t'`, but this
         -- won't happen due to the assumption that `env` has unique identifiers (and this is the
         -- reason why we need that assumption).)
-    = expose ns env $ addDefs ds' t'
+    = expose env $ addDefs ds' t'
         -- TODO This is a bit inefficient because `expose` will immediately apply `splitDefs`
     | Inr g <- f
     , Just (Lam v a, back) <- prjInj g
-    , let w = unusedName $ (v:) $ (ns++) $ Set.toList $ usedVars a
+    , let w = unusedName $ Set.toList $ allVars a `Set.union` freeVarsDefs ds
     = back $ Lam w $ addDefs ds $ rename v w a
     | Inr g <- f
     = fmap (addDefs ds) g
