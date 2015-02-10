@@ -117,7 +117,7 @@ instance Arbitrary Name
     arbitrary = fmap (\(Positive v) -> Name v) arbitrary
 
 -- | Generate a bound (probability b/(b+f)) or free (probability f/(b+f)) variable
-pickVar :: Int -> Int -> [Name] -> Gen Name
+pickVar :: Arbitrary name => Int -> Int -> [name] -> Gen name
 pickVar _ 0 [] = error "pickVar: no variables in scope"
 pickVar _ _ [] = arbitrary
 pickVar b f env = frequency
@@ -235,13 +235,17 @@ mutateTerm t
 -- * Generation of 'DAG's
 ----------------------------------------------------------------------------------------------------
 
+instance Arbitrary DName
+  where
+    arbitrary = fmap (\(Positive v) -> DName v) arbitrary
+
 genLets
     :: (Constructors f, Traversable f)
-    => Bool    -- ^ Only closed terms?
-    -> Int     -- ^ Size
-    -> [Name]  -- ^ Variables in scope
-    -> [Name]  -- ^ Variables in scope
-    -> Int     -- ^ Number of bindings
+    => Bool     -- ^ Only closed terms?
+    -> Int      -- ^ Size
+    -> [DName]  -- ^ Variables in scope
+    -> [Name]   -- ^ Variables in scope
+    -> Int      -- ^ Number of bindings
     -> Gen (DAG (Binding :+: f))
 genLets closed s denv env 0 = genDAG closed s denv env
 genLets closed s denv env n = do
@@ -253,10 +257,10 @@ genLets closed s denv env n = do
 -- | Generate a term with let binders for sharing
 genDAG
     :: (Constructors f, Functor f, Traversable f)
-    => Bool    -- ^ Only closed terms?
-    -> Int     -- ^ Size
-    -> [Name]  -- ^ Variables in scope
-    -> [Name]  -- ^ Variables in scope
+    => Bool     -- ^ Only closed terms?
+    -> Int      -- ^ Size
+    -> [DName]  -- ^ Variables in scope
+    -> [Name]   -- ^ Variables in scope
     -> Gen (DAG (Binding :+: f))
 genDAG closed 0 denv env = frequency
     [ (freqDVar, fmap (Term . Inl . DVar) $ oneof $ map return denv
@@ -401,7 +405,7 @@ genEnv s = do
     vs <- fmap nub $ replicateM n $ fmap (\(Positive a) -> a) arbitrary
     go vs []
   where
-    go :: [Name] -> Defs (Binding :+: f) -> Gen (Defs (Binding :+: f))
+    go :: [DName] -> Defs (Binding :+: f) -> Gen (Defs (Binding :+: f))
     go []     env = return env
     go (v:vs) env = do
         a <- genDAG False (s `div` 4) ns []

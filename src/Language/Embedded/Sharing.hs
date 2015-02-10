@@ -29,10 +29,24 @@ import Language.Embedded
 
 
 
+-- | Variable name
+newtype DName = DName Integer
+  deriving (Eq, Ord, Num, Enum, Real, Integral)
+
+instance Show DName
+  where
+    show (DName n) = show n
+
+toDName :: Name -> DName
+toDName (Name n) = DName n
+
+fromDName :: DName -> Name
+fromDName (DName n) = Name n
+
 -- | Variables and bindings in a 'DAG'
 data DAGF a
-    = DVar Name
-    | DLet Name a a
+    = DVar DName
+    | DLet DName a a
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''DAGF]
@@ -41,7 +55,7 @@ derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''DAGF]
 type DAG f = Term (DAGF :+: f)
 
 -- | Find the set of free DAG variables (i.e. 'DVar') in a 'DAG'
-freeDVars :: (Functor f, Foldable f) => DAG f -> Set Name
+freeDVars :: (Functor f, Foldable f) => DAG f -> Set DName
 freeDVars (Term (Inl (DVar v)))     = Set.singleton v
 freeDVars (Term (Inl (DLet v a b))) = Set.union (freeDVars a) $ Set.delete v $ freeDVars b
 freeDVars (Term f)                  = Foldable.fold $ fmap freeDVars f
@@ -69,7 +83,7 @@ unusedName :: [Name] -> Name
 unusedName [] = 0
 unusedName ns = maximum ns + 1
 
-inlineDAGEnv :: (Binding :<<: f, Functor f) => Map Name (Term f) -> Map Name Name -> DAG f -> Term f
+inlineDAGEnv :: (Binding :<<: f, Functor f) => Map DName (Term f) -> Map Name Name -> DAG f -> Term f
 inlineDAGEnv env re (Term (Inl (DVar v)))
     | Just a <- Map.lookup v env = a
 inlineDAGEnv env re (Term (Inl (DLet v a b))) =
@@ -100,7 +114,7 @@ inlineDAG t = inlineDAGEnv Map.empty (Map.fromList init) t
 
 -- | A sequence of local definitions. Earlier definitions may depend on later ones, and earlier
 -- definitions shadow later ones.
-type Defs f = [(Name, DAG f)]
+type Defs f = [(DName, DAG f)]
 
 -- | Add a number of local binders to a term. Existing binders shadow and may depend on the new
 -- ones. @`uncurry` `addDefs`@ is the left inverse of 'splitDefs'.
