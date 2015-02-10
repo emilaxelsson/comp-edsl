@@ -29,24 +29,24 @@ import Language.Embedded
 
 
 
--- | Variable name
-newtype DName = DName Integer
+-- | Name of a reference
+newtype RName = RName Integer
   deriving (Eq, Ord, Num, Enum, Real, Integral)
 
-instance Show DName
+instance Show RName
   where
-    show (DName n) = show n
+    show (RName n) = show n
 
-toDName :: Name -> DName
-toDName (Name n) = DName n
+toRName :: Name -> RName
+toRName (Name n) = RName n
 
-fromDName :: DName -> Name
-fromDName (DName n) = Name n
+fromRName :: RName -> Name
+fromRName (RName n) = Name n
 
 -- | Variables and bindings in a 'DAG'
 data DAGF a
-    = Ref DName
-    | Def DName a a
+    = Ref RName
+    | Def RName a a
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''DAGF]
@@ -55,7 +55,7 @@ derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''DAGF]
 type DAG f = Term (DAGF :+: f)
 
 -- | Find the set of free references in a 'DAG'
-freeRefs :: (Functor f, Foldable f) => DAG f -> Set DName
+freeRefs :: (Functor f, Foldable f) => DAG f -> Set RName
 freeRefs (Term (Inl (Ref v)))     = Set.singleton v
 freeRefs (Term (Inl (Def v a b))) = Set.union (freeRefs a) $ Set.delete v $ freeRefs b
 freeRefs (Term f)                 = Foldable.fold $ fmap freeRefs f
@@ -83,7 +83,7 @@ unusedName :: [Name] -> Name
 unusedName [] = 0
 unusedName ns = maximum ns + 1
 
-inlineDAGEnv :: (Binding :<<: f, Functor f) => Map DName (Term f) -> Map Name Name -> DAG f -> Term f
+inlineDAGEnv :: (Binding :<<: f, Functor f) => Map RName (Term f) -> Map Name Name -> DAG f -> Term f
 inlineDAGEnv env re (Term (Inl (Ref v)))
     | Just a <- Map.lookup v env = a
 inlineDAGEnv env re (Term (Inl (Def v a b))) =
@@ -114,7 +114,7 @@ inlineDAG t = inlineDAGEnv Map.empty (Map.fromList init) t
 
 -- | A sequence of local definitions. Earlier definitions may depend on later ones, and earlier
 -- definitions shadow later ones.
-type Defs f = [(DName, DAG f)]
+type Defs f = [(RName, DAG f)]
 
 -- | Add a number of local binders to a term. Existing binders shadow and may depend on the new
 -- ones. @`uncurry` `addDefs`@ is the left inverse of 'splitDefs'.

@@ -235,15 +235,15 @@ mutateTerm t
 -- * Generation of 'DAG's
 ----------------------------------------------------------------------------------------------------
 
-instance Arbitrary DName
+instance Arbitrary RName
   where
-    arbitrary = fmap (\(Positive v) -> DName v) arbitrary
+    arbitrary = fmap (\(Positive v) -> RName v) arbitrary
 
 genDefs
     :: (Constructors f, Traversable f)
     => Bool     -- ^ Only closed terms?
     -> Int      -- ^ Size
-    -> [DName]  -- ^ Variables in scope
+    -> [RName]  -- ^ Variables in scope
     -> [Name]   -- ^ Variables in scope
     -> Int      -- ^ Number of bindings
     -> Gen (DAG (Binding :+: f))
@@ -259,7 +259,7 @@ genDAG
     :: (Constructors f, Functor f, Traversable f)
     => Bool     -- ^ Only closed terms?
     -> Int      -- ^ Size
-    -> [DName]  -- ^ Variables in scope
+    -> [RName]  -- ^ Variables in scope
     -> [Name]   -- ^ Variables in scope
     -> Gen (DAG (Binding :+: f))
 genDAG closed 0 denv env = frequency
@@ -405,7 +405,7 @@ genEnv s = do
     vs <- fmap nub $ replicateM n $ fmap (\(Positive a) -> a) arbitrary
     go vs []
   where
-    go :: [DName] -> Defs (Binding :+: f) -> Gen (Defs (Binding :+: f))
+    go :: [RName] -> Defs (Binding :+: f) -> Gen (Defs (Binding :+: f))
     go []     env = return env
     go (v:vs) env = do
         a <- genDAG False (s `div` 4) ns []
