@@ -53,8 +53,8 @@ prop_alphaEqShadow = not (alphaEq t1 t2) && not (alphaEq t2 t1)
 
 prop_freeVars (Closed t) = Set.null $ freeVars t
 
-prop_usedVars (Open t) = Set.isSubsetOf (freeVars t) (usedVars t)
-prop_allVars  (Open t) = Set.isSubsetOf (usedVars t) (allVars t)
+prop_useRefs (Open t) = Set.isSubsetOf (freeVars t) (usedVars t)
+prop_allVars (Open t) = Set.isSubsetOf (usedVars t) (allVars t)
 
 -- Generate a finite sorted list of allocated variable names
 genAllocs = fmap (sort . map Name) $ do
@@ -105,9 +105,9 @@ prop_matchRename2 (Open t) = isJust (match (renameUnique t) t)
 prop_noMatch (Closed t) = forAll (mutateTerm t) $ \tm -> isNothing (match t tm)
 
 prop_ClosedDAG1 (ClosedDAG t)  = Set.null $ freeVars t
-prop_ClosedDAG2 (ClosedDAG t)  = Set.null $ freeDVars t
-prop_OpenDAG    (OpenDAG t)    = Set.null $ freeDVars t
-prop_DAGEnv     (DAGEnv env t) = Set.null $ freeDVars $ addDefs env t
+prop_ClosedDAG2 (ClosedDAG t)  = Set.null $ freeRefs t
+prop_OpenDAG    (OpenDAG t)    = Set.null $ freeRefs t
+prop_DAGEnv     (DAGEnv env t) = Set.null $ freeRefs $ addDefs env t
 
 -- 'foldDAG' has the same behavior as 'cata' composed with 'inlineDAG'
 prop_foldDAG (OpenDAG t) = foldDAG alg t == cata alg (inlineDAG t)

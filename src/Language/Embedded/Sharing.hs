@@ -45,7 +45,7 @@ fromDName (DName n) = Name n
 
 -- | Variables and bindings in a 'DAG'
 data DAGF a
-    = DVar DName
+    = Ref DName
     | Def DName a a
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
@@ -54,15 +54,15 @@ derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''DAGF]
 -- | Terms with sharing
 type DAG f = Term (DAGF :+: f)
 
--- | Find the set of free DAG variables (i.e. 'DVar') in a 'DAG'
-freeDVars :: (Functor f, Foldable f) => DAG f -> Set DName
-freeDVars (Term (Inl (DVar v)))    = Set.singleton v
-freeDVars (Term (Inl (Def v a b))) = Set.union (freeDVars a) $ Set.delete v $ freeDVars b
-freeDVars (Term f)                 = Foldable.fold $ fmap freeDVars f
+-- | Find the set of free references in a 'DAG'
+freeRefs :: (Functor f, Foldable f) => DAG f -> Set DName
+freeRefs (Term (Inl (Ref v)))     = Set.singleton v
+freeRefs (Term (Inl (Def v a b))) = Set.union (freeRefs a) $ Set.delete v $ freeRefs b
+freeRefs (Term f)                 = Foldable.fold $ fmap freeRefs f
 
 -- | Fold a 'DAG' without exposing the sharing structure. The semantics is as if all bindings were
 -- inlined, but the implementation only visits each node in the 'DAG' once. The 'DAG' is assumed not
--- to have any free 'DVar'.
+-- to have any free 'Ref'.
 --
 -- It is probably not a good idea to use 'foldDAG' to transform terms, since the substitution of
 -- shared terms does not deal with capturing (only a problem when there are other binders than `Def`
@@ -71,7 +71,7 @@ freeDVars (Term f)                 = Foldable.fold $ fmap freeDVars f
 foldDAG :: Functor f => (f a -> a) -> DAG f -> a
 foldDAG alg = go Map.empty
   where
-    go env (Term (Inl (DVar v)))
+    go env (Term (Inl (Ref v)))
       | Just a <- Map.lookup v env  = a
     go env (Term (Inl (Def v a b))) = go (Map.insert v (go env a) env) b
     go env (Term (Inr f))           = alg $ fmap (go env) f
@@ -84,7 +84,7 @@ unusedName [] = 0
 unusedName ns = maximum ns + 1
 
 inlineDAGEnv :: (Binding :<<: f, Functor f) => Map DName (Term f) -> Map Name Name -> DAG f -> Term f
-inlineDAGEnv env re (Term (Inl (DVar v)))
+inlineDAGEnv env re (Term (Inl (Ref v)))
     | Just a <- Map.lookup v env = a
 inlineDAGEnv env re (Term (Inl (Def v a b))) =
     inlineDAGEnv (Map.insert v (inlineDAGEnv env re a) env) re b
@@ -135,18 +135,18 @@ splitDefs = go []
 --
 -- * 'Def' binders at the top are removed and gathered in a list of local definitions.
 --
--- * If the top-most node (after removing local definitions) is a 'DVar' variable, its unfolding
+-- * If the top-most node (after removing local definitions) is a 'Ref' variable, its unfolding
 --   (coming either in the environment or from the local definitions) is returned and 'expose'd.
 --
 -- * Otherwise, the local definitions of the node are distributed down to the children, which
 --   ensures that the (call-by-name) semantics of the 'DAG' is not affected.
 --
--- When calling @`expose` env t@, it is assumed that @`addDefs` env t@ does not have any free 'DVar'
+-- When calling @`expose` env t@, it is assumed that @`addDefs` env t@ does not have any free 'Ref'
 -- variables. It is also assumed that all definitions in `env` have unique names (i.e. that
 -- @map fst env@ has no duplicates).
 expose :: (Binding :<<: f, Traversable f) => [Name] -> Defs f -> DAG f -> f (DAG f)
 expose ns env t
-    | Inl (DVar v) <- f
+    | Inl (Ref v) <- f
     , Just t' <- lookup v (ds ++ env)  -- `ds` shadows `env`
     , let ds' = drop 1 $ dropWhile ((v /=) . fst) ds  -- The part of `ds` that `t'` may depend on
         -- It is important to throw away the first part of `ds` because otherwise those bindings can

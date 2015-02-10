@@ -29,7 +29,7 @@ mkc0        = inject $ Construct "c0" []
 mkc1 a      = inject $ Construct "c1" [a]
 mkc2 a b    = inject $ Construct "c2" [a,b]
 mkc3 a b c  = inject $ Construct "c3" [a,b,c]
-mkDVar      = inject . DVar
+mkRef       = inject . Ref
 mkDef v a b = inject $ Def v a b
 
 -- | Convert an arbirary term to a term with 'Construct' nodes
@@ -263,7 +263,7 @@ genDAG
     -> [Name]   -- ^ Variables in scope
     -> Gen (DAG (Binding :+: f))
 genDAG closed 0 denv env = frequency
-    [ (freqDVar, fmap (Term . Inl . DVar) $ oneof $ map return denv
+    [ (freqRef, fmap (Term . Inl . Ref) $ oneof $ map return denv
       )
     , (1, fmap Term
         $ oneof
@@ -276,7 +276,7 @@ genDAG closed 0 denv env = frequency
       )
     ]
   where
-    freqDVar = if null denv then 0 else 2
+    freqRef  = if null denv then 0 else 2
     freqVar  = if closed && null env then 0 else 2
     freqFree = if closed then 0 else 1
 genDAG closed s denv env = frequency
@@ -307,11 +307,11 @@ instance Arbitrary ClosedDAG
     arbitrary = sized $ \s -> fmap ClosedDAG $ genDAG True (s*20) [] []
 
     shrink (ClosedDAG t)
-        | Just (DVar v) <- project t = [ClosedDAG $ inject $ constr []]
-        | Just (Var v)  <- project t = [ClosedDAG $ inject $ constr []]
+        | Just (Ref v) <- project t = [ClosedDAG $ inject $ constr []]
+        | Just (Var v) <- project t = [ClosedDAG $ inject $ constr []]
 
         | Just (Def v a b) <- project t
-        , let b' = if v `Set.member` freeDVars b then [] else [b]
+        , let b' = if v `Set.member` freeRefs b then [] else [b]
         = map ClosedDAG
             $  b'
             ++ [a]
@@ -338,11 +338,11 @@ instance Arbitrary OpenDAG
     arbitrary = sized $ \s -> fmap OpenDAG $ genDAG False (s*20) [] []
 
     shrink (OpenDAG t)
-        | Just (DVar v) <- project t = [OpenDAG $ inject $ constr []]
-        | Just (Var v)  <- project t = [OpenDAG $ inject $ constr []]
+        | Just (Ref v) <- project t = [OpenDAG $ inject $ constr []]
+        | Just (Var v) <- project t = [OpenDAG $ inject $ constr []]
 
         | Just (Def v a b) <- project t
-        , let b' = if v `Set.member` freeDVars b then [] else [b]
+        , let b' = if v `Set.member` freeRefs b then [] else [b]
         = map OpenDAG
             $  b'
             ++ [a]
@@ -430,5 +430,5 @@ instance Arbitrary DAGEnv
             ++ [ (v,a'):env | OpenDAG a' <- shrink $ OpenDAG a ]
             ++ [ (v,a):env' | env' <- go env ]
           where
-            dropBinding = if v `Set.member` freeDVars (addDefs (reverse env) t) then [] else [env]
+            dropBinding = if v `Set.member` freeRefs (addDefs (reverse env) t) then [] else [env]
 
