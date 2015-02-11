@@ -131,14 +131,6 @@ splitDefs = go []
     go ds (Term (Inl (Def v a b))) = go ((v,a):ds) b
     go ds t = (ds,t)
 
-type DefsFV f = (Set Name, Defs f)
-
-(<++>) :: DefsFV f -> DefsFV f -> DefsFV f
-(fvs1,ds1) <++> (fvs2,ds2) = (Set.union fvs1 fvs2, ds1 ++ ds2)
-
-defFV :: (Binding :<<: f, Functor f, Foldable f) => RName -> DAG f -> DefsFV f
-defFV v t = (freeVars t, [(v,t)])
-
 freeVarsDefs :: (Binding :<<: f, Functor f, Foldable f) => Defs f -> Set Name
 freeVarsDefs = Set.unions . map (freeVars . snd)
 
