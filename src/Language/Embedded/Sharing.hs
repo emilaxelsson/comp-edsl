@@ -22,16 +22,17 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Typeable (Typeable)
 
 import Data.Comp.Ops
 
-import Language.Embedded
+import Language.Embedded hiding (Typeable)
 
 
 
 -- | Name of a reference
 newtype RName = RName Integer
-  deriving (Eq, Ord, Num, Enum, Real, Integral)
+  deriving (Eq, Ord, Num, Enum, Real, Integral, Typeable)
 
 instance Show RName
   where

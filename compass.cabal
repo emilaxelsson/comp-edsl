@@ -50,6 +50,7 @@ library
 
   default-extensions:
     ConstraintKinds
+    DeriveDataTypeable
     DeriveFoldable
     DeriveFunctor
     DeriveTraversable
