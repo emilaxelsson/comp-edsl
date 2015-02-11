@@ -153,22 +153,25 @@ expose env t
     | Inl (Ref v) <- f
     , Just t' <- lookup v (ds ++ env)  -- `ds` shadows `env`
     , let ds' = drop 1 $ dropWhile ((v /=) . fst) ds  -- The part of `ds` that `t'` may depend on
-        -- It is important to throw away the first part of `ds` because otherwise those bindings can
-        -- capture variables in `t'`. (If `v` is found in `env` rather than in `ds`, there could
-        -- also be definitions in the first part of `env` that capture variables in `t'`, but this
-        -- won't happen due to the assumption that `env` has unique identifiers (and this is the
-        -- reason why we need that assumption).)
     = expose env $ addDefs ds' t'
         -- TODO This is a bit inefficient because `expose` will immediately apply `splitDefs`
+
     | Inr g <- f
     , Just (Lam v a, back) <- prjInj g
     , let w = unusedName $ Set.toList $ allVars a `Set.union` freeVarsDefs ds
     = back $ Lam w $ addDefs ds $ rename v w a
+
     | Inr g <- f
     = fmap (addDefs ds) g
         -- `splitDefs` cannot return `Def`, so we don't need to handle that case
   where
     (ds, Term f) = splitDefs t
+
+-- In the `Ref` case, it is important to throw away the first part of `ds` because otherwise those
+-- bindings can capture variables in `t'`. (If `v` is found in `env` rather than in `ds`, there
+-- could also be definitions in the first part of `env` that capture variables in `t'`, but this
+-- won't happen due to the assumption that `env` has unique identifiers (and this is the reason why
+-- we need that assumption).)
 
 -- | Use a 'DAG' transformer to transform a 'Defs' list
 transDefs
