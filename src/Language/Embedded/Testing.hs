@@ -178,9 +178,9 @@ instance Arbitrary Closed
     arbitrary = sized $ \s -> fmap Closed $ genBind True (20*s) []
 
     shrink (Closed (Term f)) = case f of
-        Inl (Var v)      -> [Closed $ Term $ Inr $ constr []]
+        Inl (Var v)      -> [Closed mkc0]
         Inl (Lam v body) ->
-            body' ++ map (Closed . Term . Inl . Lam v . unClosed) (shrink (Closed body))
+            body' ++ map (Closed . mkLam v . unClosed) (shrink (Closed body))
           where
             body' = if v `Set.member` freeVars body then [] else [Closed body]
         Inr (Construct c as) -> map Closed as ++
@@ -197,8 +197,8 @@ instance Arbitrary Open
     arbitrary = sized $ \s -> fmap Open $ genBind False (20*s) []
 
     shrink (Open (Term f)) = case f of
-        Inl (Var v)   -> [Open $ Term $ Inr $ constr []]
-        Inl (Lam v a) -> Open a : map (Open . Term . Inl . Lam v . unOpen) (shrink (Open a))
+        Inl (Var v)   -> [Open mkc0]
+        Inl (Lam v a) -> Open a : map (Open . mkLam v . unOpen) (shrink (Open a))
         Inr (Construct c as) -> map Open as ++
             map (Open . Term . Inr . constr . map unOpen) (shrink $ map Open as)
 
@@ -226,8 +226,8 @@ shiftVars = go []
 -- | Mutates a term to get another one that is guaranteed not to be alpha-equivalent
 mutateTerm :: Term (Binding :+: Construct) -> Gen (Term (Binding :+: Construct))
 mutateTerm t
-    | Just (Var v)          <- project t = fmap (inject . Var) $ mutateName v
-    | Just (Lam v a)        <- project t = fmap (inject . Lam v) $ mutateTerm a
+    | Just (Var v)          <- project t = fmap mkVar $ mutateName v
+    | Just (Lam v a)        <- project t = fmap (mkLam v) $ mutateTerm a
     | Just (Construct c []) <- project t = return $ inject $ Construct (c++c) []
     | Just (Construct c as) <- project t = frequency
         [ (1, return $ inject (Construct (c++c) as))
@@ -316,21 +316,19 @@ instance Arbitrary ClosedDAG
     arbitrary = sized $ \s -> fmap ClosedDAG $ genDAG True (s*20) [] []
 
     shrink (ClosedDAG t)
-        | Just (Ref v) <- project t = [ClosedDAG $ inject $ constr []]
-        | Just (Var v) <- project t = [ClosedDAG $ inject $ constr []]
+        | Just (Ref v) <- project t = [ClosedDAG mkc0]
+        | Just (Var v) <- project t = [ClosedDAG mkc0]
 
         | Just (Def v a b) <- project t
         , let b' = if v `Set.member` freeRefs b then [] else [b]
         = map ClosedDAG
             $  b'
             ++ [a]
-            ++ [ inject $ Def v a' b'
-                  | (ClosedDAG a', ClosedDAG b') <- shrink (ClosedDAG a, ClosedDAG b)
-               ]
+            ++ [mkDef v a' b' | (ClosedDAG a', ClosedDAG b') <- shrink (ClosedDAG a, ClosedDAG b)]
 
         | Just (Lam v body) <- project t
         , let body' = if v `Set.member` freeVars body then [] else [ClosedDAG body]
-        = body' ++ map (ClosedDAG . inject . Lam v . unClosedDAG) (shrink (ClosedDAG body))
+        = body' ++ map (ClosedDAG . mkLam v . unClosedDAG) (shrink (ClosedDAG body))
 
         | Just (Construct c as) <- project t
         = map ClosedDAG as
@@ -347,18 +345,18 @@ instance Arbitrary OpenDAG
     arbitrary = sized $ \s -> fmap OpenDAG $ genDAG False (s*20) [] []
 
     shrink (OpenDAG t)
-        | Just (Ref v) <- project t = [OpenDAG $ inject $ constr []]
-        | Just (Var v) <- project t = [OpenDAG $ inject $ constr []]
+        | Just (Ref v) <- project t = [OpenDAG mkc0]
+        | Just (Var v) <- project t = [OpenDAG mkc0]
 
         | Just (Def v a b) <- project t
         , let b' = if v `Set.member` freeRefs b then [] else [b]
         = map OpenDAG
             $  b'
             ++ [a]
-            ++ [inject $ Def v a' b' | (OpenDAG a', OpenDAG b') <- shrink (OpenDAG a, OpenDAG b)]
+            ++ [mkDef v a' b' | (OpenDAG a', OpenDAG b') <- shrink (OpenDAG a, OpenDAG b)]
 
         | Just (Lam v a) <- project t
-        = OpenDAG a : map (OpenDAG . inject . Lam v . unOpenDAG) (shrink (OpenDAG a))
+        = OpenDAG a : map (OpenDAG . mkLam v . unOpenDAG) (shrink (OpenDAG a))
 
         | Just (Construct c as) <- project t
         = map OpenDAG as
