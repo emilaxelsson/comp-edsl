@@ -120,8 +120,7 @@ instance Arbitrary STerm
 
 instance Arbitrary Name
   where
---     arbitrary = fmap (\(Positive v) -> Name v) arbitrary
-    arbitrary = fmap Name $ choose (0,5)
+    arbitrary = fmap (\(Positive v) -> Name v) arbitrary
 
 -- | Generate a bound (probability b/(b+f)) or free (probability f/(b+f)) variable
 pickVar :: Arbitrary name => Int -> Int -> [name] -> Gen name
