@@ -5,8 +5,8 @@
 
 module Language.Embedded.Constructs
     ( HasVars (..)
-    , Name (..)
     , Construct (..)
+    , Name (..)
     , Binding (..)
     , maxLam
     , lam
@@ -26,7 +26,6 @@ import Data.Tree
 import Data.Comp.Variables
 
 import Data.TypeRep hiding ((:<:))
-import Data.Syntactic.Functional (Name (..))
 
 import Language.Embedded.Syntax
 
@@ -53,6 +52,14 @@ instance ShowConstr Construct
 
 instance Render  Construct
 instance HasVars Construct v
+
+-- | Name of a variable
+newtype Name = Name Integer
+  deriving (Eq, Ord, Num, Enum, Real, Integral)
+
+instance Show Name
+  where
+    show (Name n) = show n
 
 -- | Variables and binders
 data Binding a
