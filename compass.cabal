@@ -43,13 +43,15 @@ library
     mtl,
     open-typerep,
     QuickCheck,
-    syntactic >= 2.0
+    syntactic >= 2.0,
+    testing-feat
 
   default-language:
     Haskell2010
 
   default-extensions:
     ConstraintKinds
+    DeriveDataTypeable
     DeriveFoldable
     DeriveFunctor
     DeriveTraversable

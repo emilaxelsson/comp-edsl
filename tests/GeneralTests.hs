@@ -128,11 +128,28 @@ prop_splitDefs_addDefs (OpenDAGTop t) = uncurry addDefs (splitDefs t) == t
 
 -- | 'expose' does not change the call-by-name semantics
 prop_expose (DAGEnv env t) =
+    Set.null (freeRefs $ addDefs env t) ==>
     alphaEq
         (inlineDAG $ addDefs env $ Term $ Inr $ expose vars env t)
         (inlineDAG $ addDefs env t)
   where
     vars = Set.toList $ allVars (addDefs env t)
+
+-- | Add a precondition that excludes 'DAG's with free references
+noFreeRefs :: (OpenDAG -> Bool) -> (OpenDAG -> Bool)
+noFreeRefs prop (OpenDAG t) = not (Set.null (freeRefs t)) || prop (OpenDAG t)
+
+feat_foldDAG   = featChecker 27 "foldDAG"   $ noFreeRefs prop_foldDAG
+feat_inlineDAG = featChecker 27 "inlineDAG" $ noFreeRefs prop_inlineDAG
+
+feat_expose = featChecker 27 "expose" $ \(DAGEnv env t) ->
+    let vars = Set.toList $ allVars (addDefs env t)
+    in  not (Set.null (freeRefs $ addDefs env t)) ||
+          alphaEq
+              (inlineDAG $ addDefs env $ Term $ Inr $ expose vars env t)
+              (inlineDAG $ addDefs env t)
+
+-- main = qcN 20000 prop_expose
 
 -- Test a single property
 qc = defaultMain . testProperty "single test"
@@ -146,5 +163,9 @@ qcSeed seed = defaultMain . localOption opt . testProperty "single test"
   where
     Just opt = parseValue seed :: Maybe QuickCheckReplay
 
-main = $defaultMainGenerator
+main = do
+    feat_foldDAG
+    feat_inlineDAG
+    feat_expose
+    $defaultMainGenerator
 

@@ -22,10 +22,11 @@ module Language.Embedded.Constructs
 import Data.Foldable (toList)
 import qualified Data.Set as Set
 import Data.Tree
+import Data.Typeable (Typeable)
 
 import Data.Comp.Variables
 
-import Data.TypeRep hiding ((:<:))
+import Data.TypeRep hiding ((:<:), Typeable)
 
 import Language.Embedded.Syntax
 
@@ -55,7 +56,7 @@ instance HasVars Construct v
 
 -- | Name of a variable
 newtype Name = Name Integer
-  deriving (Eq, Ord, Num, Enum, Real, Integral)
+  deriving (Eq, Ord, Num, Enum, Real, Integral, Typeable)
 
 instance Show Name
   where
