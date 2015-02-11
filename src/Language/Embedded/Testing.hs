@@ -495,3 +495,25 @@ instance Enumerable DAGEnv  where enumerate = liftA2 DAGEnv (fmap (zip [0..]) sp
 genDAGEnv :: Gen DAGEnv
 genDAGEnv = sized (uniform . (`div` 4))
 
+-- | A less verbose variant of 'featCheck', that crashes when it encounters an error
+featChecker :: (Enumerable a, Show a)
+    => Int     -- ^ Size bound
+    -> String  -- ^ Name of property
+    -> (a -> Bool)
+    -> IO ()
+featChecker s propName prop = ioFeat' (take s values) report
+  where
+    -- A less verbose version of 'ioFeat'
+    ioFeat' vs f = go vs 0 0
+      where
+        go ((c,xs):xss) s tot = mapM f xs >> go xss (s+1) (tot + c)
+        go []           s tot = putStrLn $ propName ++ ": OK (tested " ++ show tot ++ " values)"
+
+    report a
+        | prop a    = return ()
+        | otherwise = error $ unlines
+            [ ""
+            , propName ++ ": FAILED"
+            , show a
+            ]
+
