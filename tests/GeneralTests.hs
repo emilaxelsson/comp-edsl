@@ -135,9 +135,14 @@ prop_expose (DAGEnv env t) =
   where
     vars = Set.toList $ allVars (addDefs env t)
 
-prop_e = forAll genDAGEnv prop_expose
+-- | Add a precondition that excludes 'DAG's with free references
+noFreeRefs :: (OpenDAG -> Bool) -> (OpenDAG -> Bool)
+noFreeRefs prop (OpenDAG t) = not (Set.null (freeRefs t)) || prop (OpenDAG t)
 
-feat_expose = featCheck' "feat_expose" $ \(DAGEnv env t) ->
+feat_foldDAG   = featChecker 27 "foldDAG"   $ noFreeRefs prop_foldDAG
+feat_inlineDAG = featChecker 27 "inlineDAG" $ noFreeRefs prop_inlineDAG
+
+feat_expose = featChecker 27 "expose" $ \(DAGEnv env t) ->
     let vars = Set.toList $ allVars (addDefs env t)
     in  not (Set.null (freeRefs $ addDefs env t)) ||
           alphaEq
@@ -159,6 +164,8 @@ qcSeed seed = defaultMain . localOption opt . testProperty "single test"
     Just opt = parseValue seed :: Maybe QuickCheckReplay
 
 main = do
+    feat_foldDAG
+    feat_inlineDAG
     feat_expose
     $defaultMainGenerator
 
