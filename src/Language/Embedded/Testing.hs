@@ -121,6 +121,9 @@ instance Arbitrary STerm
 instance Arbitrary Name
   where
     arbitrary = fmap (\(Positive v) -> Name v) arbitrary
+      -- Note: Properties that fail because of faulty variable renaming seems to be easier to catch
+      -- if names are chosen from a smaller set (e.g of size 5), but it seems wrong to hard-code
+      -- that into the generator.
 
 -- | Generate a bound (probability b/(b+f)) or free (probability f/(b+f)) variable
 pickVar :: Arbitrary name => Int -> Int -> [name] -> Gen name
