@@ -490,6 +490,8 @@ spaceDAGs = consts
 instance Enumerable Open    where enumerate = fmap Open spaceOpen
 instance Enumerable OpenDAG where enumerate = fmap OpenDAG spaceDAG
 instance Enumerable DAGEnv  where enumerate = liftA2 DAGEnv (fmap (zip [0..]) spaceDAGs) spaceDAG
+  -- TODO The reason for using the names [0..] is to ensure unique names. Ideally, one would want
+  --      arbitrary unique lists, but that's non-trivial to implement using Feat.
 
 -- | Uniform QuickCheck generator for 'DAGEnv'
 genDAGEnv :: Gen DAGEnv
