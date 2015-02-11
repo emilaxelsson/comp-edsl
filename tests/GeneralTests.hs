@@ -146,8 +146,6 @@ feat_expose = featChecker 27 "expose" $ \(DAGEnv env t) ->
             (inlineDAG $ addDefs env $ Term $ Inr $ expose env t)
             (inlineDAG $ addDefs env t)
 
--- main = qcN 20000 prop_expose
-
 -- Test a single property
 qc = defaultMain . testProperty "single test"
 
