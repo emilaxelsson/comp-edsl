@@ -158,11 +158,10 @@ expose env t
 
     | Inr g <- f
     , Just (Lam v a, back) <- prjInj g
-    , let w = unusedName $ Set.toList $ allVars a `Set.union` freeVarsDefs ds
+    , let w = unusedName $ Set.toList $ allVars a `Set.union` freeVarsDefs (ds ++ env)
     = back $ Lam w $ addDefs ds $ rename v w a
 
-    | Inr g <- f
-    = fmap (addDefs ds) g
+    | Inr g <- f = fmap (addDefs ds) g
         -- `splitDefs` cannot return `Def`, so we don't need to handle that case
   where
     (ds, Term f) = splitDefs t
