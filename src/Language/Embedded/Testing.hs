@@ -177,14 +177,13 @@ instance Arbitrary Closed
   where
     arbitrary = sized $ \s -> fmap Closed $ genBind True (20*s) []
 
-    shrink (Closed (Term f)) = case f of
-        Inl (Var v)      -> [Closed mkc0]
-        Inl (Lam v body) ->
-            body' ++ map (Closed . mkLam v . unClosed) (shrink (Closed body))
-          where
-            body' = if v `Set.member` freeVars body then [] else [Closed body]
-        Inr (Construct c as) -> map Closed as ++
-            map (Closed . Term . Inr . constr . map unClosed) (shrink $ map Closed as)
+    shrink (Closed t)
+        | Just (Var v)      <- project t = [Closed mkc0]
+        | Just (Lam v body) <- project t
+        = let body' = if v `Set.member` freeVars body then [] else [Closed body]
+          in  body' ++ map (Closed . mkLam v . unClosed) (shrink (Closed body))
+        | Just (Construct c as) <- project t
+        = map Closed as ++ map (Closed . inject . constr . map unClosed) (shrink $ map Closed as)
 
 -- | Possibly open lambda term
 newtype Open = Open { unOpen :: Term (Binding :+: Construct) }
@@ -196,11 +195,11 @@ instance Arbitrary Open
   where
     arbitrary = sized $ \s -> fmap Open $ genBind False (20*s) []
 
-    shrink (Open (Term f)) = case f of
-        Inl (Var v)   -> [Open mkc0]
-        Inl (Lam v a) -> Open a : map (Open . mkLam v . unOpen) (shrink (Open a))
-        Inr (Construct c as) -> map Open as ++
-            map (Open . Term . Inr . constr . map unOpen) (shrink $ map Open as)
+    shrink (Open t)
+        | Just (Var v)   <- project t = [Open mkc0]
+        | Just (Lam v a) <- project t = Open a : map (Open . mkLam v . unOpen) (shrink (Open a))
+        | Just (Construct c as) <- project t
+        = map Open as ++ map (Open . inject . constr . map unOpen) (shrink $ map Open as)
 
 mutateName :: Name -> Gen Name
 mutateName (Name v) = fmap (Name . (v+) . getPositive) arbitrary
