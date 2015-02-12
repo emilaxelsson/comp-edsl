@@ -126,25 +126,43 @@ prop_splitDefs_removes_Def (OpenDAGTop t) =
 
 prop_splitDefs_addDefs (OpenDAGTop t) = uncurry addDefs (splitDefs t) == t
 
--- | 'expose' does not change the call-by-name semantics
-prop_expose (DAGEnv env t) =
-    Set.null (freeRefs $ addDefs env t) ==>
-    alphaEq
-        (inlineDAG $ addDefs env $ Term $ Inr $ expose env t)
-        (inlineDAG $ addDefs env t)
+prop_expose (DAGEnv env t) = alphaEq
+    (inlineDAG $ addDefs env $ Term $ Inr $ expose env t)
+    (inlineDAG $ addDefs env t)
+  -- Here we regard `DAGEnv env t` as a position in the DAG `addDefs env t` and the property
+  -- expresses that applying `expose` at that position does not change the semantics.
 
--- | Add a precondition that excludes 'DAG's with free references
-noFreeRefs :: (OpenDAG -> Bool) -> (OpenDAG -> Bool)
-noFreeRefs prop (OpenDAG t) = not (Set.null (freeRefs t)) || prop (OpenDAG t)
+expo :: (Binding :<<: f, Traversable f) => Defs f -> DAG f -> DAG f
+expo env = Term . Inr . fmap (expo env) . expose env
 
-feat_foldDAG   = featChecker 27 "foldDAG"   $ noFreeRefs prop_foldDAG
-feat_inlineDAG = featChecker 27 "inlineDAG" $ noFreeRefs prop_inlineDAG
+prop_expose2 (DAGEnv env t) = alphaEq
+    (inlineDAG $ addDefs env $ expo env t)
+    (inlineDAG $ addDefs env t)
+  -- `prop_expose` only checks the application of `expose` to `t` in an expression of the form
+  -- `addDefs env t`. Ideally, we want to check applying `expose` at an arbitrary position in a
+  -- term. This property is a bit tricky to express, and would be quite hard to test using Feat. But
+  -- `prop_expose2` strengthens `prop_expose` by applying `expose` to *all* nodes in `t`.
+  --
+  -- For example, `prop_expose2` checks that renaming is done properly in the case
+  --
+  --     let env = [(0, mkVar 0)]
+  --         dag = mkLam 0 $ mkRef 0
+  --     in  DAGEnv env dag
+  --
+  -- This is not checked by `prop_expose`.
 
-feat_expose = featChecker 27 "expose" $ \(DAGEnv env t) ->
-    not (Set.null (freeRefs $ addDefs env t)) ||
-        alphaEq
-            (inlineDAG $ addDefs env $ Term $ Inr $ expose env t)
-            (inlineDAG $ addDefs env t)
+-- | Add a precondition that checks absence of free references
+properOpenDAG :: (OpenDAG -> Bool) -> (OpenDAG -> Bool)
+properOpenDAG prop (OpenDAG t) = not (Set.null (freeRefs t)) || prop (OpenDAG t)
+
+-- | Add a precondition that checks absence of free references
+properDAGEnv :: (DAGEnv -> Bool) -> (DAGEnv -> Bool)
+properDAGEnv prop (DAGEnv env t) = not (Set.null (freeRefs $ addDefs env t)) || prop (DAGEnv env t)
+
+feat_foldDAG   = featChecker 27 "foldDAG"   $ properOpenDAG prop_foldDAG
+feat_inlineDAG = featChecker 27 "inlineDAG" $ properOpenDAG prop_inlineDAG
+feat_expose    = featChecker 27 "expose"    $ properDAGEnv  prop_expose
+feat_expose2   = featChecker 27 "expose"    $ properDAGEnv  prop_expose2
 
 -- Test a single property
 qc = defaultMain . testProperty "single test"
