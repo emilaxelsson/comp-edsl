@@ -147,7 +147,9 @@ propExpose (CxtDAG c) = alphaEq
 -- `expose`.
 --
 -- A safe context is one that does not include shadowing definitions and does not include any
--- lambdas that might capture variables when inlining definitions.
+-- lambdas that might capture variables when inlining definitions. It is also assumed that
+-- `appCxt c` does not have any free references, but this assumption is baked into the `CxtDAG`
+-- type.
 
 prop_expose1 (DAGEnv env t) = alphaEq
     (inlineDAG $ addDefs env $ Term $ Inr $ expose env t)
