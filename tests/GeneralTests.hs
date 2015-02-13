@@ -129,8 +129,7 @@ prop_splitDefs_removes_Def (OpenDAGTop t) =
 prop_splitDefs_addDefs (OpenDAGTop t) = uncurry addDefs (splitDefs t) == t
 
 -- | Soundness of 'expose'
-propExpose :: (Binding :<<: f, EqF f, Traversable f) => Context (DAGF :+: f) (DAG f) -> Bool
-propExpose c = alphaEq
+propExpose (CxtDAG c) = alphaEq
     (inlineDAG $ appCxt $ fmap expo $ holesEnv c)
     (inlineDAG $ appCxt c)
   where
@@ -145,11 +144,11 @@ propExpose c = alphaEq
 -- in that context. There is no QuickCheck generator for contexts (yet), so as a complement, we
 -- define two simpler (and weaker) properties of `expose`.
 
-prop_expose (DAGEnv env t) = alphaEq
+prop_expose1 (DAGEnv env t) = alphaEq
     (inlineDAG $ addDefs env $ Term $ Inr $ expose env t)
     (inlineDAG $ addDefs env t)
 
--- `prop_expose` regards `DAGEnv env t` as a position in the DAG `addDefs env t` and the property
+-- `prop_expose1` regards `DAGEnv env t` as a position in the DAG `addDefs env t` and the property
 -- expresses that applying `expose` at that position does not change the semantics.
 
 prop_expose2 (DAGEnv env t) = alphaEq
@@ -159,7 +158,7 @@ prop_expose2 (DAGEnv env t) = alphaEq
     expo :: (Binding :<<: f, Traversable f) => Defs f -> DAG f -> DAG f
     expo env = Term . Inr . fmap (expo env) . expose env
 
--- `prop_expose` only checks the application of `expose` to `t` in a context formed by
+-- `prop_expose1` only checks the application of `expose` to `t` in a context formed by
 -- `addDefs env`. `prop_expose2` improves the test by applying `expose` to all sub-terms. For
 -- example, `prop_expose2` checks that renaming of the lambda is done properly in the case
 --
@@ -167,11 +166,12 @@ prop_expose2 (DAGEnv env t) = alphaEq
 --         dag = mkLam 0 $ mkRef 0
 --     in  DAGEnv env dag
 --
--- This is not checked by `prop_expose`.
+-- This is not checked by `prop_expose1`.
 
 feat_foldDAG   = featChecker 27 "foldDAG"   $ properOpenDAG prop_foldDAG
 feat_inlineDAG = featChecker 27 "inlineDAG" $ properOpenDAG prop_inlineDAG
-feat_expose    = featChecker 27 "expose"    $ properDAGEnv  prop_expose
+feat_expose    = featChecker 27 "expose"    $ properCxtDAG  propExpose
+feat_expose1   = featChecker 27 "expose1"   $ properDAGEnv  prop_expose1
 feat_expose2   = featChecker 27 "expose2"   $ properDAGEnv  prop_expose2
 
 -- Test a single property
@@ -190,5 +190,7 @@ main = do
     feat_foldDAG
     feat_inlineDAG
     feat_expose
+    feat_expose1
+    feat_expose2
     $defaultMainGenerator
 
