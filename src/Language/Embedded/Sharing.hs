@@ -24,6 +24,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (Typeable)
 
+import Data.Comp.Algebra (appCxt)
 import Data.Comp.Ops
 
 import Language.Embedded hiding (Typeable)
@@ -195,4 +196,12 @@ transDefs
     -> (Defs g -> Defs f -> Defs g)
 transDefs trans env ds = foldr (\(v,a) e -> (v, trans e a) : e) env ds
   -- Important to fold from the right, since earlier definitions may depend on later ones
+
+-- | Pair each 'Hole' with its environment
+holesEnv :: Functor f => Context (DAGF :+: f) (DAG f) -> Context (DAGF :+: f) (Defs f, DAG f)
+holesEnv = go []
+  where
+    go env (Term (Inl (Def v a b))) = Term $ Inl $ Def v (go env a) $ go ((v, appCxt a):env) b
+    go env (Term f)                 = Term $ fmap (go env) f
+    go env (Hole a)                 = Hole (env,a)
 
