@@ -133,16 +133,21 @@ propExpose (CxtDAG c) = alphaEq
     (inlineDAG $ appCxt $ fmap expo $ holesEnv c)
     (inlineDAG $ appCxt c)
   where
-    expo (env,t)
-        | rs == nub rs = Term $ Inr $ expose env t  -- `env` has no shadowing
-        | otherwise    = t                          -- `env` has shadowing
+    expo (env,vs,t)
+        | rs == nub rs                                    -- `env` has no shadowing
+        , all (not . (`Set.member` freeVarsDefs env)) vs  -- inlining does not lead to capture
+        = Term $ Inr $ expose env t
+        | otherwise = t
       where
         rs = map fst env
 
--- `propExpose` expresses the soundness condition for `expose`; namely that exposing a term in *any*
--- context (that does not include shadowing definitions) does not change the semantics of the term
--- in that context. There is no QuickCheck generator for contexts (yet), so as a complement, we
--- define two simpler (and weaker) properties of `expose`.
+-- `propExpose` expresses the soundness condition for `expose`; namely that exposing a term in a
+-- safe context (see below) does not change the semantics of the term in that context. There is no
+-- QuickCheck generator for contexts (yet), so as a complement, we define two simpler properties of
+-- `expose`.
+--
+-- A safe context is one that does not include shadowing definitions and does not include any
+-- lambdas that might capture variables when inlining definitions.
 
 prop_expose1 (DAGEnv env t) = alphaEq
     (inlineDAG $ addDefs env $ Term $ Inr $ expose env t)
@@ -170,7 +175,7 @@ prop_expose2 (DAGEnv env t) = alphaEq
 
 feat_foldDAG   = featChecker 27 "foldDAG"   $ properOpenDAG prop_foldDAG
 feat_inlineDAG = featChecker 27 "inlineDAG" $ properOpenDAG prop_inlineDAG
-feat_expose    = featChecker 27 "expose"    $ properCxtDAG  propExpose
+feat_expose    = featChecker 24 "expose"    $ properCxtDAG  propExpose
 feat_expose1   = featChecker 27 "expose1"   $ properDAGEnv  prop_expose1
 feat_expose2   = featChecker 27 "expose2"   $ properDAGEnv  prop_expose2
 

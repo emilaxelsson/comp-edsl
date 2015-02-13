@@ -198,10 +198,16 @@ transDefs trans env ds = foldr (\(v,a) e -> (v, trans e a) : e) env ds
   -- Important to fold from the right, since earlier definitions may depend on later ones
 
 -- | Pair each 'Hole' with its environment
-holesEnv :: Functor f => Context (DAGF :+: f) (DAG f) -> Context (DAGF :+: f) (Defs f, DAG f)
-holesEnv = go []
+holesEnv :: forall f . (Binding :<<: f, Functor f) =>
+    Context (DAGF :+: f) (DAG f) -> Context (DAGF :+: f) (Defs f, [Name], DAG f)
+holesEnv = go [] []
   where
-    go env (Term (Inl (Def v a b))) = Term $ Inl $ Def v (go env a) $ go ((v, appCxt a):env) b
-    go env (Term f)                 = Term $ fmap (go env) f
-    go env (Hole a)                 = Hole (env,a)
+    go :: Defs f -> [Name] -> Context (DAGF :+: f) (DAG f)
+        -> Context (DAGF :+: f) (Defs f, [Name], DAG f)
+    go env vs (Term (Inl (Def v a b))) =
+        Term $ Inl $ Def v (go env vs a) $ go ((v, appCxt a):env) vs b
+    go env vs (Term f)
+        | Just (Lam v _) <- prj f = Term $ fmap (go env (v:vs)) f
+    go env vs (Term f) = Term $ fmap (go env vs) f
+    go env vs (Hole a) = Hole (env,vs,a)
 
