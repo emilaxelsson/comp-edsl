@@ -169,14 +169,6 @@ prop_expose2 (DAGEnv env t) = alphaEq
 --
 -- This is not checked by `prop_expose`.
 
--- | Add a precondition that checks absence of free references
-properOpenDAG :: (OpenDAG -> Bool) -> (OpenDAG -> Bool)
-properOpenDAG prop (OpenDAG t) = not (Set.null (freeRefs t)) || prop (OpenDAG t)
-
--- | Add a precondition that checks absence of free references
-properDAGEnv :: (DAGEnv -> Bool) -> (DAGEnv -> Bool)
-properDAGEnv prop (DAGEnv env t) = not (Set.null (freeRefs $ addDefs env t)) || prop (DAGEnv env t)
-
 feat_foldDAG   = featChecker 27 "foldDAG"   $ properOpenDAG prop_foldDAG
 feat_inlineDAG = featChecker 27 "inlineDAG" $ properOpenDAG prop_inlineDAG
 feat_expose    = featChecker 27 "expose"    $ properDAGEnv  prop_expose

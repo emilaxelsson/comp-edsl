@@ -444,6 +444,28 @@ instance Arbitrary DAGEnv
 -- * Enumeration using Feat
 ----------------------------------------------------------------------------------------------------
 
+-- | A less verbose variant of 'featCheck', that crashes when it encounters an error
+featChecker :: (Enumerable a, Show a)
+    => Int     -- ^ Size bound
+    -> String  -- ^ Name of property
+    -> (a -> Bool)
+    -> IO ()
+featChecker s propName prop = ioFeat' (take s values) report
+  where
+    -- A less verbose version of 'ioFeat'
+    ioFeat' vs f = go vs 0 0
+      where
+        go ((c,xs):xss) s tot = mapM f xs >> go xss (s+1) (tot + c)
+        go []           s tot = putStrLn $ propName ++ ": OK (tested " ++ show tot ++ " values)"
+
+    report a
+        | prop a    = return ()
+        | otherwise = error $ unlines
+            [ ""
+            , propName ++ ": FAILED"
+            , show a
+            ]
+
 -- | Increase the cost of an enumeration by @n@
 pays :: Int -> Enumerate a -> Enumerate a
 pays n e = iterate pay e !! n
@@ -496,25 +518,11 @@ instance Enumerable DAGEnv  where enumerate = liftA2 DAGEnv (fmap (zip [0..]) sp
 genDAGEnv :: Gen DAGEnv
 genDAGEnv = sized (uniform . (`div` 4))
 
--- | A less verbose variant of 'featCheck', that crashes when it encounters an error
-featChecker :: (Enumerable a, Show a)
-    => Int     -- ^ Size bound
-    -> String  -- ^ Name of property
-    -> (a -> Bool)
-    -> IO ()
-featChecker s propName prop = ioFeat' (take s values) report
-  where
-    -- A less verbose version of 'ioFeat'
-    ioFeat' vs f = go vs 0 0
-      where
-        go ((c,xs):xss) s tot = mapM f xs >> go xss (s+1) (tot + c)
-        go []           s tot = putStrLn $ propName ++ ": OK (tested " ++ show tot ++ " values)"
+-- | Add a precondition that checks absence of free references
+properOpenDAG :: (OpenDAG -> Bool) -> (OpenDAG -> Bool)
+properOpenDAG prop (OpenDAG t) = not (Set.null (freeRefs t)) || prop (OpenDAG t)
 
-    report a
-        | prop a    = return ()
-        | otherwise = error $ unlines
-            [ ""
-            , propName ++ ": FAILED"
-            , show a
-            ]
+-- | Add a precondition that checks absence of free references
+properDAGEnv :: (DAGEnv -> Bool) -> (DAGEnv -> Bool)
+properDAGEnv prop (DAGEnv env t) = not (Set.null (freeRefs $ addDefs env t)) || prop (DAGEnv env t)
 
