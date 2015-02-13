@@ -30,7 +30,7 @@ import Language.Embedded hiding (Typeable)
 
 
 
--- | Name of a reference
+-- | Name of a 'DAG' reference
 newtype RName = RName Integer
   deriving (Eq, Ord, Num, Enum, Real, Integral, Typeable)
 
@@ -171,6 +171,23 @@ expose env t
 -- could also be definitions in the first part of `env` that capture variables in `t'`, but this
 -- won't happen due to the assumption that `env` has unique identifiers (and this is the reason why
 -- we need that assumption).)
+
+-- Note that there are two worrying inefficiencies in `expose`:
+--
+--   * Finding the variables in `a` and `ds ++ env`
+--   * Renaming `v` to `w` in `a`
+--
+-- For the first one, the solution would be to cache the set of free variables in `DAG`s. For this
+-- to work, one would have to hide `DAG` node creation behind a safe interface that correctly sets
+-- the set of variables.
+--
+-- The second one is harder. If DAG references and variables had the same name space, it would be
+-- possible to do the renaming by just introducing a `Ref`. But because of the separate name spaces,
+-- one would have to use a different construct for renaming. Using `Let` is not a good idea, because
+-- one would then have to construct a new variable, which requires a `Binding :<: f` constraint.
+-- Another problem is that since `expose` does not handle `Let` nodes the way it handles `Def`,
+-- those `Let` nodes might appear in the result of `expose` (e.g. if we have a deep pattern that
+-- first exposes a lambda and then its body).
 
 -- | Use a 'DAG' transformer to transform a 'Defs' list
 transDefs
