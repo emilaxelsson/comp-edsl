@@ -62,6 +62,18 @@ instance Render DAGF
 -- | Terms with sharing
 type DAG f = Term (DAGF :+: f)
 
+-- | Higher-order interface for introducing sharing
+def :: DAG f -> (DAG f -> DAG f) -> DAG f
+def a f = Term $ Inl $ Def r a body
+  where
+    body = f $ Term $ Inl $ Ref r
+    r    = 8
+
+-- | Find the highest name bound by the closest 'Def's
+maxDef :: (Functor f, Foldable f) => DAG f -> RName
+maxDef (Term (Inl (Def r a _))) = r `max` maxDef a
+maxDef (Term f) = Foldable.maximum $ fmap maxDef f
+
 -- | Find the set of free references in a 'DAG'
 freeRefs :: (Functor f, Foldable f) => DAG f -> Set RName
 freeRefs (Term (Inl (Ref v)))     = Set.singleton v
