@@ -22,6 +22,7 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Tree (Tree (..))
 import Data.Typeable (Typeable)
 
 import Data.Comp.Algebra (appCxt)
@@ -52,6 +53,11 @@ data DAGF a
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 derive [makeEqF,makeOrdF,makeShowF,makeShowConstr] [''DAGF]
+
+instance Render DAGF
+  where
+    stringTreeAlg (Ref r)     = Node ("Ref r" ++ show r) []
+    stringTreeAlg (Def r a b) = Node ("Def r" ++ show r) [a,b]
 
 -- | Terms with sharing
 type DAG f = Term (DAGF :+: f)
