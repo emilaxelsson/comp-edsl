@@ -81,6 +81,7 @@ test-suite General
   default-language: Haskell2010
 
   default-extensions:
+    FlexibleContexts
 
   other-extensions:
     NoMonomorphismRestriction
@@ -89,6 +90,7 @@ test-suite General
     TypeOperators
 
   build-depends:
+    compdata,
     compass,
     containers,
     base,

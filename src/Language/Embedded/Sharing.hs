@@ -24,13 +24,14 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (Typeable)
 
+import Data.Comp.Algebra (appCxt)
 import Data.Comp.Ops
 
 import Language.Embedded hiding (Typeable)
 
 
 
--- | Name of a reference
+-- | Name of a 'DAG' reference
 newtype RName = RName Integer
   deriving (Eq, Ord, Num, Enum, Real, Integral, Typeable)
 
@@ -131,6 +132,9 @@ splitDefs = go []
     go ds (Term (Inl (Def v a b))) = go ((v,a):ds) b
     go ds t = (ds,t)
 
+freeVarsDefs :: (Binding :<<: f, Functor f, Foldable f) => Defs f -> Set Name
+freeVarsDefs = Set.unions . map (freeVars . snd)
+
 -- | Expose the top-most constructor in a 'DAG' given an environment of definitions in scope. It
 -- works roughly as follows:
 --
@@ -142,30 +146,58 @@ splitDefs = go []
 -- * Otherwise, the local definitions of the node are distributed down to the children, which
 --   ensures that the (call-by-name) semantics of the 'DAG' is not affected.
 --
--- When calling @`expose` env t@, it is assumed that @`addDefs` env t@ does not have any free 'Ref'
--- variables. It is also assumed that all definitions in `env` have unique names (i.e. that
--- @map fst env@ has no duplicates).
-expose :: (Binding :<<: f, Traversable f) => [Name] -> Defs f -> DAG f -> f (DAG f)
-expose ns env t
+-- When calling @`expose` env t@, it is assumed that @t@ appears in a context and that the result of
+-- 'expose' will be inserted back into this context. For this to be safe, the following conditions
+-- must be fulfilled:
+--
+-- * @env@ represents the definitions in scope, in order of decreasing locality
+--
+-- * All definitions in @env@ have unique names (i.e. @map fst env@ has no duplicates)
+--
+-- * @`addDefs` env t@ does not have any free DAG references
+--
+-- * Any definition in scope can be inlined in @t@ without risking that variables are captured by a
+--   binder in the context. Note that no requirements are placed on binders in @t@.
+expose :: (Binding :<<: f, Traversable f) => Defs f -> DAG f -> f (DAG f)
+expose env t
     | Inl (Ref v) <- f
     , Just t' <- lookup v (ds ++ env)  -- `ds` shadows `env`
     , let ds' = drop 1 $ dropWhile ((v /=) . fst) ds  -- The part of `ds` that `t'` may depend on
-        -- It is important to throw away the first part of `ds` because otherwise those bindings can
-        -- capture variables in `t'`. (If `v` is found in `env` rather than in `ds`, there could
-        -- also be definitions in the first part of `env` that capture variables in `t'`, but this
-        -- won't happen due to the assumption that `env` has unique identifiers (and this is the
-        -- reason why we need that assumption).)
-    = expose ns env $ addDefs ds' t'
+    = expose env $ addDefs ds' t'
         -- TODO This is a bit inefficient because `expose` will immediately apply `splitDefs`
+
     | Inr g <- f
     , Just (Lam v a, back) <- prjInj g
-    , let w = unusedName $ (v:) $ (ns++) $ Set.toList $ usedVars a
+    , let w = unusedName $ Set.toList $ allVars a `Set.union` freeVarsDefs (ds ++ env)
     = back $ Lam w $ addDefs ds $ rename v w a
-    | Inr g <- f
-    = fmap (addDefs ds) g
+
+    | Inr g <- f = fmap (addDefs ds) g
         -- `splitDefs` cannot return `Def`, so we don't need to handle that case
   where
     (ds, Term f) = splitDefs t
+
+-- In the `Ref` case, it is important to throw away the first part of `ds` because otherwise those
+-- bindings can capture variables in `t'`. (If `v` is found in `env` rather than in `ds`, there
+-- could also be definitions in the first part of `env` that capture variables in `t'`, but this
+-- won't happen due to the assumption that `env` has unique identifiers (and this is the reason why
+-- we need that assumption).)
+
+-- Note that there are two worrying inefficiencies in `expose`:
+--
+--   * Finding the variables in `a` and `ds ++ env`
+--   * Renaming `v` to `w` in `a`
+--
+-- For the first one, the solution would be to cache the set of free variables in `DAG`s. For this
+-- to work, one would have to hide `DAG` node creation behind a safe interface that correctly sets
+-- the set of variables.
+--
+-- The second one is harder. If DAG references and variables had the same name space, it would be
+-- possible to do the renaming by just introducing a `Ref`. But because of the separate name spaces,
+-- one would have to use a different construct for renaming. Using `Let` is not a good idea, because
+-- one would then have to construct a new variable, which requires a `Binding :<: f` constraint.
+-- Another problem is that since `expose` does not handle `Let` nodes the way it handles `Def`,
+-- those `Let` nodes might appear in the result of `expose` (e.g. if we have a deep pattern that
+-- first exposes a lambda and then its body).
 
 -- | Use a 'DAG' transformer to transform a 'Defs' list
 transDefs
@@ -173,4 +205,18 @@ transDefs
     -> (Defs g -> Defs f -> Defs g)
 transDefs trans env ds = foldr (\(v,a) e -> (v, trans e a) : e) env ds
   -- Important to fold from the right, since earlier definitions may depend on later ones
+
+-- | Pair each 'Hole' with its environment
+holesEnv :: forall f . (Binding :<<: f, Functor f) =>
+    Context (DAGF :+: f) (DAG f) -> Context (DAGF :+: f) (Defs f, [Name], DAG f)
+holesEnv = go [] []
+  where
+    go :: Defs f -> [Name] -> Context (DAGF :+: f) (DAG f)
+        -> Context (DAGF :+: f) (Defs f, [Name], DAG f)
+    go env vs (Term (Inl (Def v a b))) =
+        Term $ Inl $ Def v (go env vs a) $ go ((v, appCxt a):env) vs b
+    go env vs (Term f)
+        | Just (Lam v _) <- prj f = Term $ fmap (go env (v:vs)) f
+    go env vs (Term f) = Term $ fmap (go env vs) f
+    go env vs (Hole a) = Hole (env,vs,a)
 
