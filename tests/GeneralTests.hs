@@ -172,7 +172,7 @@ prop_expose2 (DAGEnv env t) = alphaEq
 feat_foldDAG   = featChecker 27 "foldDAG"   $ properOpenDAG prop_foldDAG
 feat_inlineDAG = featChecker 27 "inlineDAG" $ properOpenDAG prop_inlineDAG
 feat_expose    = featChecker 27 "expose"    $ properDAGEnv  prop_expose
-feat_expose2   = featChecker 27 "expose"    $ properDAGEnv  prop_expose2
+feat_expose2   = featChecker 27 "expose2"   $ properDAGEnv  prop_expose2
 
 -- Test a single property
 qc = defaultMain . testProperty "single test"
