@@ -129,27 +129,31 @@ prop_splitDefs_removes_Def (OpenDAGTop t) =
 prop_splitDefs_addDefs (OpenDAGTop t) = uncurry addDefs (splitDefs t) == t
 
 -- | Soundness of 'expose'
-propExpose :: (Binding :<<: f, EqF f, Traversable f) => Context (DAGF :+: f) (DAG f) -> Bool
-propExpose c = alphaEq
+propExpose (CxtDAG c) = alphaEq
     (inlineDAG $ appCxt $ fmap expo $ holesEnv c)
     (inlineDAG $ appCxt c)
   where
-    expo (env,t)
-        | rs == nub rs = Term $ Inr $ expose env t  -- `env` has no shadowing
-        | otherwise    = t                          -- `env` has shadowing
+    expo (env,vs,t)
+        | rs == nub rs                                    -- `env` has no shadowing
+        , all (not . (`Set.member` freeVarsDefs env)) vs  -- inlining does not lead to capture
+        = Term $ Inr $ expose env t
+        | otherwise = t
       where
         rs = map fst env
 
--- `propExpose` expresses the soundness condition for `expose`; namely that exposing a term in *any*
--- context (that does not include shadowing definitions) does not change the semantics of the term
--- in that context. There is no QuickCheck generator or Feat enumerator for contexts (yet), so
--- instead, we express two simpler (and weaker) properties of `expose`.
+-- `propExpose` expresses the soundness condition for `expose`; namely that exposing a term in a
+-- safe context (see below) does not change the semantics of the term in that context. There is no
+-- QuickCheck generator for contexts (yet), so as a complement, we define two simpler properties of
+-- `expose`.
+--
+-- A safe context is one that does not include shadowing definitions and does not include any
+-- lambdas that might capture variables when inlining definitions.
 
-prop_expose (DAGEnv env t) = alphaEq
+prop_expose1 (DAGEnv env t) = alphaEq
     (inlineDAG $ addDefs env $ Term $ Inr $ expose env t)
     (inlineDAG $ addDefs env t)
 
--- `prop_expose` regards `DAGEnv env t` as a position in the DAG `addDefs env t` and the property
+-- `prop_expose1` regards `DAGEnv env t` as a position in the DAG `addDefs env t` and the property
 -- expresses that applying `expose` at that position does not change the semantics.
 
 prop_expose2 (DAGEnv env t) = alphaEq
@@ -159,7 +163,7 @@ prop_expose2 (DAGEnv env t) = alphaEq
     expo :: (Binding :<<: f, Traversable f) => Defs f -> DAG f -> DAG f
     expo env = Term . Inr . fmap (expo env) . expose env
 
--- `prop_expose` only checks the application of `expose` to `t` in a context formed by
+-- `prop_expose1` only checks the application of `expose` to `t` in a context formed by
 -- `addDefs env`. `prop_expose2` improves the test by applying `expose` to all sub-terms. For
 -- example, `prop_expose2` checks that renaming of the lambda is done properly in the case
 --
@@ -167,20 +171,13 @@ prop_expose2 (DAGEnv env t) = alphaEq
 --         dag = mkLam 0 $ mkRef 0
 --     in  DAGEnv env dag
 --
--- This is not checked by `prop_expose`.
-
--- | Add a precondition that checks absence of free references
-properOpenDAG :: (OpenDAG -> Bool) -> (OpenDAG -> Bool)
-properOpenDAG prop (OpenDAG t) = not (Set.null (freeRefs t)) || prop (OpenDAG t)
-
--- | Add a precondition that checks absence of free references
-properDAGEnv :: (DAGEnv -> Bool) -> (DAGEnv -> Bool)
-properDAGEnv prop (DAGEnv env t) = not (Set.null (freeRefs $ addDefs env t)) || prop (DAGEnv env t)
+-- This is not checked by `prop_expose1`.
 
 feat_foldDAG   = featChecker 27 "foldDAG"   $ properOpenDAG prop_foldDAG
 feat_inlineDAG = featChecker 27 "inlineDAG" $ properOpenDAG prop_inlineDAG
-feat_expose    = featChecker 27 "expose"    $ properDAGEnv  prop_expose
-feat_expose2   = featChecker 27 "expose"    $ properDAGEnv  prop_expose2
+feat_expose    = featChecker 24 "expose"    $ properCxtDAG  propExpose
+feat_expose1   = featChecker 27 "expose1"   $ properDAGEnv  prop_expose1
+feat_expose2   = featChecker 27 "expose2"   $ properDAGEnv  prop_expose2
 
 -- Test a single property
 qc = defaultMain . testProperty "single test"
@@ -198,5 +195,7 @@ main = do
     feat_foldDAG
     feat_inlineDAG
     feat_expose
+    feat_expose1
+    feat_expose2
     $defaultMainGenerator
 

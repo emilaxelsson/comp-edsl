@@ -146,9 +146,18 @@ freeVarsDefs = Set.unions . map (freeVars . snd)
 -- * Otherwise, the local definitions of the node are distributed down to the children, which
 --   ensures that the (call-by-name) semantics of the 'DAG' is not affected.
 --
--- When calling @`expose` env t@, it is assumed that @`addDefs` env t@ does not have any free 'Ref'
--- variables. It is also assumed that all definitions in `env` have unique names (i.e. that
--- @map fst env@ has no duplicates).
+-- When calling @`expose` env t@, it is assumed that @t@ appears in a context and that the result of
+-- 'expose' will be inserted back into this context. For this to be safe, the following conditions
+-- must be fulfilled:
+--
+-- * @env@ represents the definitions in scope, in order of decreasing locality
+--
+-- * All definitions in @env@ have unique names (i.e. @map fst env@ has no duplicates)
+--
+-- * @`addDefs` env t@ does not have any free DAG references
+--
+-- * Any definition in scope can be inlined in @t@ without risking that variables are captured by a
+--   binder in the context. Note that no requirements are placed on binders in @t@.
 expose :: (Binding :<<: f, Traversable f) => Defs f -> DAG f -> f (DAG f)
 expose env t
     | Inl (Ref v) <- f
@@ -198,10 +207,16 @@ transDefs trans env ds = foldr (\(v,a) e -> (v, trans e a) : e) env ds
   -- Important to fold from the right, since earlier definitions may depend on later ones
 
 -- | Pair each 'Hole' with its environment
-holesEnv :: Functor f => Context (DAGF :+: f) (DAG f) -> Context (DAGF :+: f) (Defs f, DAG f)
-holesEnv = go []
+holesEnv :: forall f . (Binding :<<: f, Functor f) =>
+    Context (DAGF :+: f) (DAG f) -> Context (DAGF :+: f) (Defs f, [Name], DAG f)
+holesEnv = go [] []
   where
-    go env (Term (Inl (Def v a b))) = Term $ Inl $ Def v (go env a) $ go ((v, appCxt a):env) b
-    go env (Term f)                 = Term $ fmap (go env) f
-    go env (Hole a)                 = Hole (env,a)
+    go :: Defs f -> [Name] -> Context (DAGF :+: f) (DAG f)
+        -> Context (DAGF :+: f) (Defs f, [Name], DAG f)
+    go env vs (Term (Inl (Def v a b))) =
+        Term $ Inl $ Def v (go env vs a) $ go ((v, appCxt a):env) vs b
+    go env vs (Term f)
+        | Just (Lam v _) <- prj f = Term $ fmap (go env (v:vs)) f
+    go env vs (Term f) = Term $ fmap (go env vs) f
+    go env vs (Hole a) = Hole (env,vs,a)
 
