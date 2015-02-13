@@ -142,8 +142,8 @@ propExpose c = alphaEq
 
 -- `propExpose` expresses the soundness condition for `expose`; namely that exposing a term in *any*
 -- context (that does not include shadowing definitions) does not change the semantics of the term
--- in that context. There is no QuickCheck generator or Feat enumerator for contexts (yet), so
--- instead, we express two simpler (and weaker) properties of `expose`.
+-- in that context. There is no QuickCheck generator for contexts (yet), so as a complement, we
+-- define two simpler (and weaker) properties of `expose`.
 
 prop_expose (DAGEnv env t) = alphaEq
     (inlineDAG $ addDefs env $ Term $ Inr $ expose env t)

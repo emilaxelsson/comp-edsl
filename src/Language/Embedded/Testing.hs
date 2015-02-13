@@ -18,6 +18,7 @@ import Test.QuickCheck
 import Test.Feat
 import Test.Feat.Enumerate (pay)
 
+import Data.Comp.Algebra (appCxt)
 import Data.Comp.Ops
 
 import Language.Embedded hiding (Typeable)
@@ -525,4 +526,33 @@ properOpenDAG prop (OpenDAG t) = not (Set.null (freeRefs t)) || prop (OpenDAG t)
 -- | Add a precondition that checks absence of free references
 properDAGEnv :: (DAGEnv -> Bool) -> (DAGEnv -> Bool)
 properDAGEnv prop (DAGEnv env t) = not (Set.null (freeRefs $ addDefs env t)) || prop (DAGEnv env t)
+
+-- | Enumerator for DAG contexts
+spaceCxtDAG :: (f ~ (Binding :+: Construct)) => Enumerate (Context (DAGF :+: f) (DAG f))
+spaceCxtDAG = consts
+    [ Hole <$> spaceDAG
+    , mkRef <$> enumerate
+    , pays 3 $ mkDef <$> enumerate <*> spaceCxtDAG <*> spaceCxtDAG
+    , mkVar <$> enumerate
+    , pays 3 $ mkLam <$> enumerate <*> spaceCxtDAG
+    , pays 3 $ pure mkc0
+    , pays 3 $ mkc1 <$> spaceCxtDAG
+    , pays 3 $ mkc2 <$> spaceCxtDAG <*> spaceCxtDAG
+    ]
+
+-- | DAG context
+newtype CxtDAG = CxtDAG
+    { unCxtDAG :: Context (DAGF :+: Binding :+: Construct) (DAG (Binding :+: Construct)) }
+  deriving (Eq, Ord, Typeable)
+
+instance Show CxtDAG
+  where
+    show = show . toConstr . appCxt . fmap mkHole . unCxtDAG
+      where
+        mkHole a = inject $ Construct "HOLE" [a]
+
+instance Enumerable CxtDAG where enumerate = fmap CxtDAG spaceCxtDAG
+
+properCxtDAG :: (CxtDAG -> Bool) -> (CxtDAG -> Bool)
+properCxtDAG prop (CxtDAG c) = not (Set.null (freeRefs $ appCxt c)) || prop (CxtDAG c)
 
