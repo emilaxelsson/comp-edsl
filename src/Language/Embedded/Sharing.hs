@@ -80,6 +80,23 @@ freeRefs (Term (Inl (Ref v)))     = Set.singleton v
 freeRefs (Term (Inl (Def v a b))) = Set.union (freeRefs a) $ Set.delete v $ freeRefs b
 freeRefs (Term f)                 = Foldable.fold $ fmap freeRefs f
 
+-- | Construct a 'DAG' by converting all 'Let' bindings to 'Def' bindings
+letToDef :: (Binding :<<: f, Let :<<: f, Functor f) => Term f -> DAG f
+letToDef = go Set.empty
+  where
+    go env t
+        | Just (Let a lam) <- prjTerm t
+        , Just (Lam v b)   <- prjTerm lam
+        = Term $ Inl $ Def (toRName v) (go env a) (go (Set.insert v env) b)
+    go env t
+        | Just (Var v) <- prjTerm t
+        , v `Set.member` env
+        = Term $ Inl $ Ref (toRName v)
+    go env (Term f)
+        | Just (Lam v a) <- prj f
+        = Term $ Inr $ fmap (go (Set.delete v env)) f
+    go env (Term f) = Term $ Inr $ fmap (go env) f
+
 -- | Fold a 'DAG' without exposing the sharing structure. The semantics is as if all bindings were
 -- inlined, but the implementation only visits each node in the 'DAG' once. The 'DAG' is assumed not
 -- to have any free 'Ref'.
@@ -216,6 +233,10 @@ expose env t
 -- Another problem is that since `expose` does not handle `Let` nodes the way it handles `Def`,
 -- those `Let` nodes might appear in the result of `expose` (e.g. if we have a deep pattern that
 -- first exposes a lambda and then its body).
+
+-- | Alpha-equivalence for 'DAG's
+alphaEqDAG :: (EqF f, Binding :<<: f, Functor f, Foldable f) => Defs f -> DAG f -> DAG f -> Bool
+alphaEqDAG env a b = alphaEq (inlineDAG $ addDefs env a) (inlineDAG $ addDefs env b)
 
 -- | Use a 'DAG' transformer to transform a 'Defs' list
 transDefs
