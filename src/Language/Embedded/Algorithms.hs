@@ -55,10 +55,7 @@ rename old new (Term f)
     = Term f
 rename old new (Term f) = Term $ fmap (rename old new) f
 
--- | Environment used by 'alphaEq''
-type AlphaEnv = [(Name,Name)]
-
-alphaEq' :: (EqF f, Binding :<<: f, Functor f, Foldable f) => AlphaEnv -> Term f -> Term f -> Bool
+alphaEq' :: (EqF f, Binding :<<: f, Functor f, Foldable f) => [(Name,Name)] -> Term f -> Term f -> Bool
 alphaEq' env var1 var2
     | Just (Var v1) <- prjTerm var1
     , Just (Var v2) <- prjTerm var2
