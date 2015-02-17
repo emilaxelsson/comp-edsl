@@ -25,7 +25,7 @@ import qualified Data.Set as Set
 import Data.Tree (Tree (..))
 import Data.Typeable (Typeable)
 
-import Data.Comp.Algebra (appCxt)
+import Data.Comp.Algebra (appCxt, appSigFun)
 import Data.Comp.Ops
 
 import Language.Embedded hiding (Typeable)
@@ -258,4 +258,15 @@ holesEnv = go [] []
         | Just (Lam v _) <- prj f = Term $ fmap (go env (v:vs)) f
     go env vs (Term f) = Term $ fmap (go env vs) f
     go env vs (Hole a) = Hole (env,vs,a)
+
+-- | Lift a signature function to a signature extended with 'DAGF'
+sigFunDAG :: (forall a . f a -> g a) -> (DAGF :+: f) a -> (DAGF :+: g) a
+sigFunDAG trans (Inl f) = Inl f
+sigFunDAG trans (Inr f) = Inr $ trans f
+
+-- | Apply a signature function to a 'DAG'
+--
+-- > appSigFunDAG trans = appSigFun $ sigFunDAG trans
+appSigFunDAG :: Functor f => (forall a . f a -> g a) -> DAG f -> DAG g
+appSigFunDAG trans = appSigFun $ sigFunDAG trans
 
