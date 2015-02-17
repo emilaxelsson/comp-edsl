@@ -103,7 +103,7 @@ simplifyUp env t
     | Just (GetIx par i)    <- open env t
     , Just (Parallel l lam) <- open env par
     , Just (Lam v body)     <- open env lam
-    = close $ Let i $ close $ Lam v body
+    = subst v i body
 
 simplifyUp env t = t
 
