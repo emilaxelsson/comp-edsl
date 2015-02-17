@@ -10,45 +10,61 @@ import NanoFeldspar hiding (length)
 
 type Size = Int
 
-sizeOf :: Term (FeldF :&: Size) -> Size
-sizeOf = getAnn . unTerm
+getAnn :: (f :&: a) b -> a
+getAnn (_ :&: a) = a
+
+dropAnn :: (f :&: a) b -> f b
+dropAnn (f :&: _) = f
+
+sizeOf :: Defs (FeldF :&: Size) -> DAG (FeldF :&: Size) -> Size
+sizeOf env = getAnn . expose env
+
+stripAnn :: Functor f => DAG (f :&: a) -> DAG f
+stripAnn = appSigFunDAG dropAnn
+
+-- | Alpha equivalence for decorated 'DAG's
+alpha :: (EqF f, Binding :<<: f, Functor f, Foldable f) =>
+    Defs (f :&: a) -> DAG (f :&: a) -> DAG (f :&: a) -> Bool
+alpha env a b = alphaEqDAG env' (stripAnn a) (stripAnn b)
+  where
+    env' = [(v, stripAnn t) | (v,t) <- env]
 
 -- | Expose the top-most constructor. Like 'expose', specialized for Feldspar and with projection.
-open :: (f :<: FeldF) =>
-    Defs (FeldF :&: Size) -> Term (FeldF :&: Size) -> Maybe (f (Term (FeldF :&: Size)))
-open env = proj . dropAnn . expose2 100 env
+open :: (f :<<: FeldF) =>
+    Defs (FeldF :&: Size) -> DAG (FeldF :&: Size) -> Maybe (f (DAG (FeldF :&: Size)))
+open env = fmap dropAnn . openS env
+
+-- | Expose the top-most constructor. Like 'expose', specialized for Feldspar and with projection.
+openS :: (f :<<: FeldF) =>
+    Defs (FeldF :&: Size) -> DAG (FeldF :&: Size) -> Maybe ((f :&: Size) (DAG (FeldF :&: Size)))
+openS env t = case expose env t of
+    f :&: s -> fmap (:&: s) $ prj f
 
 -- | Construct a node
-close :: (f :<: FeldF) => f (Term (FeldF :&: Size)) -> Term (FeldF :&: Size)
-close f = Term $ sizeProp $ inj f
+close :: (f :<: FeldF) => f (DAG (FeldF :&: Size)) -> DAG (FeldF :&: Size)
+close = Term . Inr . sizeProp . inj
 
-sizeProp :: FeldF (Term (FeldF :&: Size)) -> (FeldF :&: Size) (Term (FeldF :&: Size))
+sizeProp :: FeldF (DAG (FeldF :&: Size)) -> (FeldF :&: Size) (DAG (FeldF :&: Size))
 sizeProp f = f :&: 100  -- TODO
 
-viewLit :: Defs (FeldF :&: Size) -> Term (FeldF :&: Size) -> Maybe Int
+viewLit :: Defs (FeldF :&: Size) -> DAG (FeldF :&: Size) -> Maybe Int
 viewLit env t = do
     Lit (Dyn typ i :: Dynamic FeldTypesSimple) <- open env t
     Dict <- typeEq typ intType
     return i
 
-simplify :: Defs (FeldF :&: Size) -> Term FeldF -> Term (FeldF :&: Size)
-simplify env t = addDefs2 100 ds' $ simplifyUp env' def
+simplify :: Defs (FeldF :&: Size) -> DAG FeldF -> DAG (FeldF :&: Size)
+simplify env t = case f of
+    Inr g       -> addDefs ds' $ simplifyUp env' $ close $ fmap (simplify env') g
+    Inl (Ref r) -> addDefs ds' $ simplifyUp env' $ Term $ Inl $ Ref r
   where
     (ds, Term f) = splitDefs t
-    env' = transDefs simplify env ds
-    ds'  = take (length ds) env'
-    def  = close $ fmap (simplify env') f  -- Default result
-
--- TODO Remove
-alpEq :: (EqF f, Binding :<<: f, Let :<<: f, Functor f, Foldable f) =>
-    Term (f :&: a) -> Term (f :&: a) -> Bool
-alpEq a b = stripAnn a `alphaEq` stripAnn b
-
-stripAnn = cata $ \(f :&: _) -> Term f
+    env'         = transDefs simplify env ds
+    ds'          = take (length ds) env'
 
 
 
-simplifyUp :: Defs (FeldF :&: Size) -> Term (FeldF :&: Size) -> Term (FeldF :&: Size)
+simplifyUp :: Defs (FeldF :&: Size) -> DAG (FeldF :&: Size) -> DAG (FeldF :&: Size)
 
 -- a+a  ==>  a*2  (bad rule, but just for illustration)
 simplifyUp env t
@@ -56,13 +72,8 @@ simplifyUp env t
     = case () of
         _ | Just 0 <- viewLit env a' -> b'
           | Just 0 <- viewLit env b' -> a'
-          | alpEq a' b'              -> close $ Mul a' (desugarSimp (value 2 :: Data Int))  -- TODO Type
+          | alpha env a' b'          -> close $ Mul a' (desugarSimp (value 2 :: Data Int))  -- TODO Type
           | otherwise                -> t
-
-  -- TODO The use of alphaEq assumes that equal terms have the same free variables (could be
-  --      variables that are in scope from higher up). If this is not the case, use a different
-  --      function that looks up free variables in the environment and maybe uses hashing to improve
-  --      performance.
 
 -- 0*b  ==>  b
 -- a*0  ==>  a
@@ -84,7 +95,7 @@ simplifyUp env t
     | Just (Parallel l lam) <- open env t
     , Just (Lam v gix)      <- open env lam
     , Just (GetIx a i)      <- open env gix
-    , alpEq i (close $ Var v)
+    , alpha env i (close $ Var v)
     = a  -- TODO SetLen
 
 -- getIx (parallel l (\j -> body)) i  ==>  let j = i in body
@@ -92,16 +103,14 @@ simplifyUp env t
     | Just (GetIx par i)    <- open env t
     , Just (Parallel l lam) <- open env par
     , Just (Lam v body)     <- open env lam
-    = addDefs2 100 [(v,i)] body
+    = close $ Let i $ close $ Lam v body
 
 simplifyUp env t = t
 
 
 
-desugarSimp :: (Syntactic a, PF a ~ FeldF) => a -> Term (FeldF :&: Size)
-desugarSimp = simplify [] . unTERM . desugar
-
-
+desugarSimp :: (Syntactic a, PF a ~ FeldF) => a -> DAG (FeldF :&: Size)
+desugarSimp = simplify [] . letToDef . unTERM . desugar
 
 term1 :: Data Int -> Data Int
 term1 a = share (a*10) $ \b -> share 0 $ \c -> b+c
