@@ -237,6 +237,7 @@ expose env t
 -- | Alpha-equivalence for 'DAG's
 alphaEqDAG :: (EqF f, Binding :<<: f, Functor f, Foldable f) => Defs f -> DAG f -> DAG f -> Bool
 alphaEqDAG env a b = alphaEq (inlineDAG $ addDefs env a) (inlineDAG $ addDefs env b)
+  -- TODO Inefficient for terms with a lot of sharing
 
 -- | Use a 'DAG' transformer to transform a 'Defs' list
 transDefs

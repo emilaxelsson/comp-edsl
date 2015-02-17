@@ -54,6 +54,7 @@ rename old new (Term f)
     , v == old
     = Term f
 rename old new (Term f) = Term $ fmap (rename old new) f
+  -- Implementing `rename` using `subst` would require a `Binding :<: f` constraint
 
 alphaEq' :: (EqF f, Binding :<<: f, Functor f, Foldable f) => [(Name,Name)] -> Term f -> Term f -> Bool
 alphaEq' env var1 var2
