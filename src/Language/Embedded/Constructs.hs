@@ -8,6 +8,7 @@ module Language.Embedded.Constructs
     , Construct (..)
     , Name (..)
     , Binding (..)
+    , showVar
     , maxLam
     , lam
     , App (..)

@@ -8,6 +8,9 @@
 module Language.Embedded.Eval
     ( -- * Type universes
       module Data.TypeRep
+    , scopeErr
+    , typedCompErr
+    , evalErr
       -- * Typed compilation
     , CExp (..)
     , Compile (..)
@@ -30,8 +33,20 @@ import Data.Maybe (fromJust)
 import qualified Data.Syntactic as S
 import Data.TypeRep hiding ((:+:), Project (..), (:<:) (..))
 
+import Data.EitherUtils
 import Language.Embedded.Syntax
 import Language.Embedded.Constructs
+
+
+
+scopeErr :: Name -> String
+scopeErr v = "variable " ++ showVar v ++ " not in scope"
+
+typedCompErr :: ShowS
+typedCompErr = ("typed compilation:" ++)
+
+evalErr :: ShowS
+evalErr = ("evaluation:" ++)
 
 
 
@@ -42,7 +57,8 @@ type RunEnv t = Map Name (Dynamic t)
 --
 -- The first argument to `CExp` is a representation of the result type, and the second argument is a
 -- function that computes an @a@ given a runtime environment.
-data CExp t where
+data CExp t
+  where
     CExp :: TypeRep t a -> (RunEnv t -> a) -> CExp t
 
 -- | An expression compiler parameterized on its compile-time environment. Note that as the compiler
@@ -53,7 +69,7 @@ data CExp t where
 -- are taken to be the types of @a@ and @b@ (in that order).
 --
 -- The second argument gives the types of variables in scope.
-type Compiler t = [E (TypeRep t)] -> Map Name (E (TypeRep t)) -> Maybe (CExp t)
+type Compiler t = [E (TypeRep t)] -> Map Name (E (TypeRep t)) -> Either String (CExp t)
 
 -- | Algebra for compiling expressions
 class Compile f t
@@ -61,8 +77,8 @@ class Compile f t
     compileAlg :: Alg f (Compiler t)
 
 -- | Typed compilation
-compile :: forall f t . (Compile f t, Traversable f) =>
-    Map Name (E (TypeRep t)) -> Term f -> Maybe (CExp t)
+compile :: (Compile f t, Traversable f) =>
+    Map Name (E (TypeRep t)) -> Term f -> Either String (CExp t)
 compile cenv t = cata compileAlg t [] cenv
 
 -- | Evaluate a term using typed compilation
@@ -81,14 +97,16 @@ evalTop _ e = go e typeRep Map.empty
     go (Term f) t env  -- This case handles top-level lambdas
         | Just (Lam v b) <- prj f
         , [E ta, E tb]   <- matchCon t
-        , Just Dict      <- typeEq t (funType ta tb)
+        , Right Dict     <- typeEq t (funType ta tb)
         = \a -> go b tb (Map.insert v (Dyn ta a) env)
     go e te env
-        | Just (CExp t c) <- compile env' e
-        , Just Dict       <- typeEq t te
+        | Right (CExp t c) <- compile env' e
+        , Right Dict       <- typeEq t te
         = c env
       where
         env' = fmap (\(Dyn t _) -> E t) env
+
+
 
 -- | General implementation of 'compileAlg' for construct of type @A -> B@
 compileAlg_A_B :: forall t a b . (TypeEq t t, Typeable t a, Typeable t b) =>
@@ -149,9 +167,9 @@ instance (Compile f t, Compile g t) => Compile (f :+: g) t
 instance (FunType S.:<: t, TypeEq t t) => Compile Binding t
   where
     compileAlg (Var v) _ cenv = do
-        E t <- Map.lookup v cenv
-        return $ CExp t $ \env -> fromJust $ do
-            Dyn t' a <- Map.lookup v env
+        E t <- may (typedCompErr $ scopeErr v) $ Map.lookup v cenv
+        return $ CExp t $ \env -> runEither $ do
+            Dyn t' a <- may (evalErr $ scopeErr v) $ Map.lookup v env
             Dict     <- typeEq t t'
             return a
     compileAlg (Lam v b) (E t : aenv) cenv = do
@@ -181,7 +199,7 @@ instance (FunType S.:<: t, TypeEq t t) => Compile App t
 
 instance SubUniverse tLit t => Compile (Lit tLit) t
   where
-    compileAlg (Lit (Dyn ta a)) _ _ = Just $ CExp (weakenUniverse ta) $ \_ -> a
+    compileAlg (Lit (Dyn ta a)) _ _ = return $ CExp (weakenUniverse ta) $ \_ -> a
 
 instance (BoolType S.:<: t, TypeEq t t) => Compile Cond t
   where

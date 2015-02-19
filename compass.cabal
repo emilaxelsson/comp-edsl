@@ -24,6 +24,7 @@ extra-source-files:
 
 library
   exposed-modules:
+    Data.EitherUtils
     Language.Embedded
     Language.Embedded.Syntax
     Language.Embedded.Constructs
