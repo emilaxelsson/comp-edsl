@@ -101,9 +101,9 @@ logg msg = tell [msg]
 -- | Fake instance that ignores the logging
 instance MonadWriter [String] Id
   where
-    tell _        = Id ()
-    listen (Id a) = Id (a,[])
-    pass          = fmap fst
+    tell _ = Id ()
+    listen = error "listen not implemented for Id"
+    pass   = error "pass not implemented for Id"
 
 
 
