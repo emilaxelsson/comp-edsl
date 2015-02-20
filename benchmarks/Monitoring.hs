@@ -81,13 +81,6 @@ exprRef a = iterRef a f a
 -- * Benchmarks
 ----------------------------------------------------------------------------------------------------
 
-type E   = ErrT Id
-type L   = LoggerT Id
-type F   = FuelT Id
-type EF  = ErrT (FuelT Id)
-type FE  = FuelT (ErrT Id)
-type LFE = LoggerT (FuelT (ErrT Id))
-
 fuel = 100000000
 
 runE   = runId . execErrT
