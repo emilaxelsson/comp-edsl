@@ -11,12 +11,6 @@ module Data.EitherUtils where
 
 
 
-
--- | Convert from 'Maybe' to 'Either'
-may :: e -> Maybe a -> Either e a
-may msg (Just a) = Right a
-may msg Nothing  = Left msg
-
 -- | Extract the 'Right' value, or fail with the 'Left' value as error message
 runEither :: Either String a -> a
 runEither (Right a)  = a

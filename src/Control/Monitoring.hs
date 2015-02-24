@@ -76,6 +76,10 @@ instance MonadError String Id
     throwError = error
     catchError a _ = a
 
+may :: MonadErr m => String -> Maybe a -> m a
+may msg Nothing  = throw msg
+may msg (Just a) = return a
+
 
 
 ----------------------------------------------------------------------------------------------------

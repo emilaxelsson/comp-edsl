@@ -35,6 +35,7 @@ import Data.Maybe (fromJust)
 import qualified Data.Syntactic as S
 import Data.TypeRep hiding ((:+:), Project (..), (:<:) (..))
 
+import Control.Monitoring
 import Data.EitherUtils
 import Language.Embedded.Syntax
 import Language.Embedded.Constructs
