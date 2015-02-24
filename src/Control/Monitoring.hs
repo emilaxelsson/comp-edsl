@@ -28,7 +28,11 @@ import Control.Monad.Writer.Strict
 
 -- | Identity monad (to avoid making orphan instances for the standard identity monad)
 newtype Id a = Id { runId :: a }
-  deriving (Functor)
+  deriving (Eq, Ord, Functor)
+
+instance Show a => Show (Id a)
+  where
+    show = show . runId
 
 instance Applicative Id
   where
