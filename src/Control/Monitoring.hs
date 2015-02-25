@@ -122,7 +122,7 @@ instance MonadWriter [String] Id
 -- | A computation \"on fuel\"
 type FuelT m = StateT Integer m
 
-type MonadFuel = MonadState Integer
+type MonadFuel m = (MonadErr m, MonadState Integer m)
 
 -- | Run a computation on fuel
 runFuelT :: Monad m
@@ -132,7 +132,7 @@ runFuelT :: Monad m
 runFuelT = evalStateT
 
 -- | Consumes one unit of fuel and throws an error when the fuel goes below 0
-tick :: (MonadErr m, MonadFuel m) => m ()
+tick :: MonadFuel m => m ()
 tick = do
     fuel <- get
     let fuel' = fuel-1

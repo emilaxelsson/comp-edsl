@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -172,7 +173,7 @@ writeHtmlAST = EDSL.writeHtmlAST "tree.html" . desugar
 -- * Evaluation
 ----------------------------------------------------------------------------------------------------
 
-instance Applicative m => Compile NUM m FeldTypes
+instance (Applicative m, MonadFuel m) => Compile NUM m FeldTypes
   where
     compileAlg (Abs a)   = compileAlg_a_a pNum abs a
     compileAlg (Sign a)  = compileAlg_a_a pNum signum a
@@ -180,7 +181,7 @@ instance Applicative m => Compile NUM m FeldTypes
     compileAlg (Sub a b) = compileAlg_a_a_a pNum (-) a b
     compileAlg (Mul a b) = compileAlg_a_a_a pNum (*) a b
 
-instance Applicative m => Compile ORD m FeldTypes
+instance (Applicative m, MonadFuel m) => Compile ORD m FeldTypes
   where
     compileAlg (LTH a b) = compileAlg_a_a_B pOrd (Prelude.<) a b
     compileAlg (GTH a b) = compileAlg_a_a_B pOrd (Prelude.>) a b
@@ -189,7 +190,7 @@ instance Applicative m => Compile ORD m FeldTypes
     compileAlg (Min a b) = compileAlg_a_a_a pOrd Prelude.min a b
     compileAlg (Max a b) = compileAlg_a_a_a pOrd Prelude.max a b
 
-instance (Applicative m, Monad m) => Compile Array m FeldTypes
+instance (Applicative m, MonadFuel m) => Compile Array m FeldTypes
   where
     -- getIx :: [a] -> Index -> a
     compileAlg (GetIx a i) _ cenv = do
@@ -199,13 +200,13 @@ instance (Applicative m, Monad m) => Compile Array m FeldTypes
         Dict       <- typeEq ta (listType telem)
         Dict       <- typeEq ti intType
         Dict       <- nonFunction telem
-        return $ CExp telem $ \env -> (!!) <$> a' env <*> i' env
+        return $ CExp telem $ \env -> tick >> (!!) <$> a' env <*> i' env
     -- arrLen :: [a] -> Length
     compileAlg (ArrLen a) _ cenv = do
         CExp ta a' <- a [] cenv
         [E telem]  <- matchConM ta
         Dict       <- typeEq ta (listType telem)
-        return $ CExp intType $ \env -> Prelude.length <$> a' env
+        return $ CExp intType $ \env -> tick >> Prelude.length <$> a' env
     -- parallel :: Length -> (Index -> a) -> [a]
     --
     -- parallel :: ( tf ~ (Index -> ta)
@@ -219,15 +220,15 @@ instance (Applicative m, Monad m) => Compile Array m FeldTypes
         Dict       <- typeEq tf (funType intType ta)
         Dict       <- typeEq tl intType
         Dict       <- nonFunction ta
-        return $ CExp (listType ta) $ \env -> parallelSem (l' env) (f' env)
+        return $ CExp (listType ta) $ \env -> tick >> parallelSem (l' env) (f' env)
       where
         parallelSem ml mf = do
             l <- ml
             case l of
                 0 -> return []
-                _ -> Prelude.mapM mf [0 .. l-1]
+                _ -> Prelude.mapM ((tick >>) . mf) [0 .. l-1]
 
-instance Monad m => Compile ForLoop m FeldTypes
+instance MonadFuel m => Compile ForLoop m FeldTypes
   where
     -- forLoop :: Length -> s -> (Index -> s -> s) -> s
     --
@@ -242,14 +243,14 @@ instance Monad m => Compile ForLoop m FeldTypes
         Dict             <- typeEq tl intType
         Dict             <- typeEq tstep (funType intType (funType tinit tinit))
         Dict             <- nonFunction tinit
-        return $ CExp tinit $ \env -> forSem (l' env) (init' env) (step' env)
+        return $ CExp tinit $ \env -> tick >> forSem (l' env) (init' env) (step' env)
       where
         forSem ml minit mstep = do
             l    <- ml
             init <- minit
             case l of
                 0 -> return init  -- Needed when length is unsigned
-                _ -> foldM (flip mstep) init [0..l-1]
+                _ -> foldM (\s i -> tick >> mstep i s) init [0..l-1]
 
 eval :: (Syntactic a, PF a ~ FeldF, Typeable FeldTypes (Internal a)) => a -> Internal a
 eval = evalSimple (Proxy :: Proxy FeldTypes) . desugar'

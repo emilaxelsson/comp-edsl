@@ -128,7 +128,7 @@ instance (Compile f m t, Compile g m t) => Compile (f :+: g) m t
     compileAlg (Inl f) = compileAlg f
     compileAlg (Inr f) = compileAlg f
 
-instance (FunType S.:<: t, TypeEq t t, VarArg t, MonadErr m) => Compile Binding m t
+instance (FunType S.:<: t, TypeEq t t, VarArg t, MonadFuel m) => Compile Binding m t
   where
     compileAlg (Var v) _ cenv = do
         E t  <- may (scopeErr v) $ Map.lookup v cenv
@@ -136,14 +136,14 @@ instance (FunType S.:<: t, TypeEq t t, VarArg t, MonadErr m) => Compile Binding 
         return $ CExp t $ \env -> do
             Dyn t' a <- may (scopeErr v) $ Map.lookup v env
             Dict     <- typeEq t t'
-            return a
+            tick >> return a
       where
         scopeErr v = "variable " ++ showVar v ++ " not in scope"
     compileAlg (Lam v b) (E t : aenv) cenv = do
         CExp tb b' <- b aenv (Map.insert v (E t) cenv)
         return $ CExp (funType t tb) $ \env -> \a -> b' (Map.insert v (Dyn t a) env)
 
-instance (FunType S.:<: t, TypeEq t t, VarArg t, Monad m) => Compile Let m t
+instance (FunType S.:<: t, TypeEq t t, VarArg t, MonadFuel m) => Compile Let m t
   where
     -- let :: a -> (a -> b) -> b
     compileAlg (Let a f) _ cenv = do
@@ -153,9 +153,11 @@ instance (FunType S.:<: t, TypeEq t t, VarArg t, Monad m) => Compile Let m t
         Dict       <- typeEq tf (funType ta tb)
         Dict       <- nonFunction ta
         Dict       <- nonFunction tb
-        return $ CExp tb $ \env -> f' env =<< a' env
+        return $ CExp tb $ \env -> do
+            a'' <- a' env
+            tick >> f' env a''
 
-instance (FunType S.:<: t, TypeEq t t, VarArg t, Monad m) => Compile App m t
+instance (FunType S.:<: t, TypeEq t t, VarArg t, MonadFuel m) => Compile App m t
   where
     -- app :: (a -> b) -> a -> b
     compileAlg (App f a) _ cenv = do
@@ -165,15 +167,17 @@ instance (FunType S.:<: t, TypeEq t t, VarArg t, Monad m) => Compile App m t
         Dict       <- typeEq tf (funType ta tb)
         Dict       <- nonFunction ta
         Dict       <- nonFunction tb
-        return $ CExp tb $ \env -> f' env =<< a' env
+        return $ CExp tb $ \env -> do
+            a'' <- a' env
+            tick >> f' env a''
 
-instance (SubUniverse tLit t, VarArg tLit, Applicative m) => Compile (Lit tLit) m t
+instance (SubUniverse tLit t, VarArg tLit, MonadFuel m) => Compile (Lit tLit) m t
   where
     compileAlg (Lit (Dyn ta a)) _ _ = do
         Dict <- nonFunction ta
-        return $ CExp (weakenUniverse ta) $ \_ -> pure a
+        return $ CExp (weakenUniverse ta) $ \_ -> tick >> return a
 
-instance (BoolType S.:<: t, TypeEq t t, VarArg t, Applicative m) => Compile Cond m t
+instance (BoolType S.:<: t, TypeEq t t, VarArg t, Applicative m, MonadFuel m) => Compile Cond m t
   where
     -- cond :: Bool -> a -> a -> a
     compileAlg (Cond c t f) _ cenv = do
@@ -183,7 +187,7 @@ instance (BoolType S.:<: t, TypeEq t t, VarArg t, Applicative m) => Compile Cond
         Dict       <- typeEq tc boolType
         Dict       <- typeEq tt tf
         Dict       <- nonFunction tt
-        return $ CExp tt $ \env -> iff <$> c' env <*> t' env <*> f' env
+        return $ CExp tt $ \env -> tick >> iff <$> c' env <*> t' env <*> f' env
       where
         iff c t f = if c then t else f
 
@@ -201,12 +205,13 @@ compileAlg_A_B :: forall t a b m
        , NonFunction a
        , NonFunction b
        , Applicative m
+       , MonadFuel m
        )
     => (a -> b) -> Compiler m t -> Compiler m t
 compileAlg_A_B f a _ cenv = do
     CExp ta a' <- a [] cenv
     Dict       <- typeEq ta (typeRep :: TypeRep t a)
-    return $ CExp (typeRep :: TypeRep t b) $ \env -> f <$> a' env
+    return $ CExp (typeRep :: TypeRep t b) $ \env -> tick >> f <$> a' env
 
 -- | General implementation of 'compileAlg' for construct of type @A -> B -> C@
 compileAlg_A_B_C :: forall t a b c m
@@ -218,6 +223,7 @@ compileAlg_A_B_C :: forall t a b c m
        , NonFunction b
        , NonFunction c
        , Applicative m
+       , MonadFuel m
        )
     => (a -> b -> c) -> Compiler m t -> Compiler m t -> Compiler m t
 compileAlg_A_B_C f a b _ cenv = do
@@ -225,19 +231,19 @@ compileAlg_A_B_C f a b _ cenv = do
     CExp tb b' <- b [] cenv
     Dict       <- typeEq ta (typeRep :: TypeRep t a)
     Dict       <- typeEq tb (typeRep :: TypeRep t b)
-    return $ CExp (typeRep :: TypeRep t c) $ \env -> f <$> a' env <*> b' env
+    return $ CExp (typeRep :: TypeRep t c) $ \env -> tick >> f <$> a' env <*> b' env
 
 -- | General implementation of 'compileAlg' for construct of type @p a => a -> a@
-compileAlg_a_a :: (PWitness p t t, VarArg t, Functor m) =>
+compileAlg_a_a :: (PWitness p t t, VarArg t, Functor m, MonadFuel m) =>
     Proxy p -> (forall a . p a => a -> a) -> Compiler m t -> Compiler m t
 compileAlg_a_a p f a _ cenv = do
     CExp ta a' <- a [] cenv
     Dict       <- pwit p ta
     Dict       <- nonFunction ta
-    return $ CExp ta $ \env -> f <$> a' env
+    return $ CExp ta $ \env -> tick >> f <$> a' env
 
 -- | General implementation of 'compileAlg' for construct of type @p a => a -> a -> a@
-compileAlg_a_a_a :: (TypeEq t t, PWitness p t t, VarArg t, Applicative m) =>
+compileAlg_a_a_a :: (TypeEq t t, PWitness p t t, VarArg t, Applicative m, MonadFuel m) =>
     Proxy p -> (forall a . p a => a -> a -> a) -> Compiler m t -> Compiler m t -> Compiler m t
 compileAlg_a_a_a p f a b _ cenv = do
     CExp ta a' <- a [] cenv
@@ -245,7 +251,7 @@ compileAlg_a_a_a p f a b _ cenv = do
     Dict       <- typeEq ta tb
     Dict       <- pwit p ta
     Dict       <- nonFunction ta
-    return $ CExp ta $ \env -> f <$> a' env <*> b' env
+    return $ CExp ta $ \env -> tick >> f <$> a' env <*> b' env
 
 -- | General implementation of 'compileAlg' for construct of type @p a => a -> a -> B@
 compileAlg_a_a_B :: forall t p b m
@@ -254,6 +260,7 @@ compileAlg_a_a_B :: forall t p b m
        , Typeable t b
        , VarArg t
        , Applicative m
+       , MonadFuel m
        )
     => Proxy p -> (forall a . p a => a -> a -> b) -> Compiler m t -> Compiler m t -> Compiler m t
 compileAlg_a_a_B p f a1 a2 _ cenv = do
@@ -264,5 +271,5 @@ compileAlg_a_a_B p f a1 a2 _ cenv = do
     let tb       =  typeRep :: TypeRep t b
     Dict         <- nonFunction ta1
     Dict         <- nonFunction tb
-    return $ CExp tb $ \env -> f <$> a1' env <*> a2' env
+    return $ CExp tb $ \env -> tick >> f <$> a1' env <*> a2' env
 
