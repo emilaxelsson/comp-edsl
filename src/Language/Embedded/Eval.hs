@@ -10,10 +10,6 @@ module Language.Embedded.Eval
     ( -- * Type universes
       module Data.TypeRep
     , module Data.TypeRep.VarArg
-      -- * Error messages
-    , scopeErr
-    , typedCompErr
-    , evalErr
       -- * Typed compilation
     , CExp (..)
     , Compile (..)
@@ -44,21 +40,6 @@ import Control.Monitoring
 import Data.EitherUtils
 import Language.Embedded.Syntax
 import Language.Embedded.Constructs
-
-
-
-----------------------------------------------------------------------------------------------------
--- * Error messages
-----------------------------------------------------------------------------------------------------
-
-scopeErr :: Name -> String
-scopeErr v = "variable " ++ showVar v ++ " not in scope"
-
-typedCompErr :: ShowS
-typedCompErr = ("typed compilation:" ++)
-
-evalErr :: ShowS
-evalErr = ("evaluation:" ++)
 
 
 
@@ -150,12 +131,14 @@ instance (Compile f m t, Compile g m t) => Compile (f :+: g) m t
 instance (FunType S.:<: t, TypeEq t t, VarArg t, MonadErr m) => Compile Binding m t
   where
     compileAlg (Var v) _ cenv = do
-        E t  <- may (typedCompErr $ scopeErr v) $ Map.lookup v cenv
+        E t  <- may (scopeErr v) $ Map.lookup v cenv
         Dict <- nonFunction t
         return $ CExp t $ \env -> do
-            Dyn t' a <- may (evalErr $ scopeErr v) $ Map.lookup v env
+            Dyn t' a <- may (scopeErr v) $ Map.lookup v env
             Dict     <- typeEq t t'
             return a
+      where
+        scopeErr v = "variable " ++ showVar v ++ " not in scope"
     compileAlg (Lam v b) (E t : aenv) cenv = do
         CExp tb b' <- b aenv (Map.insert v (E t) cenv)
         return $ CExp (funType t tb) $ \env -> \a -> b' (Map.insert v (Dyn t a) env)
