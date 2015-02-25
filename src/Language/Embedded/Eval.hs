@@ -106,8 +106,7 @@ evalTop _ _ _ e = fmap ($ Map.empty) $ go e (typeRep :: TypeRep t a) Map.empty
         Dict     <- typeEq t te
         return c
 
--- | Evaluate an expression using typed compilation. Compilation errors become actual errors. The
--- 'Id' monad is used during evaluation.
+-- | Evaluate an expression in the 'Id' monad
 evalSimple :: forall f t a
     .  ( Typeable t a
        , Compile f Id t
@@ -122,6 +121,25 @@ evalSimple pt = runMonadic runId (typeRep :: TypeRep t a) . runEither . evalTop 
   where
     pa = Proxy :: Proxy a
     pm = Proxy :: Proxy Id
+
+-- | Evaluate an expression in the monad @(`ErrT` (`FuelT` `Id`))@
+evalFuel :: forall f t a
+    .  ( Typeable t a
+       , Compile f (ErrT (FuelT Id)) t
+       , Traversable f
+       , Binding :<<: f
+       , FunType S.:<: t
+       , TypeEq t t
+       , VarArg t
+       )
+    => Proxy t
+    -> Integer  -- ^ Amout of fuel to start with
+    -> Term f
+    -> a
+evalFuel pt fuel
+    = runMonadic (runId . flip runFuelT fuel . execErrT) (typeRep :: TypeRep t a)
+    . runEither
+    . evalTop pt (Proxy :: Proxy (ErrT (FuelT Id))) (Proxy :: Proxy a)
 
 instance (Compile f m t, Compile g m t) => Compile (f :+: g) m t
   where
