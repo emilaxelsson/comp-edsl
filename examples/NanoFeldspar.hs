@@ -6,6 +6,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -22,9 +23,12 @@ import Prelude hiding
 import qualified Prelude
 
 import Control.Applicative
+import Control.Monad (foldM)
 
 import qualified Data.Syntactic as S
 
+import Control.Monitoring
+import Data.EitherUtils
 import Language.Embedded hiding (showAST, drawAST, writeHtmlAST)
 import qualified Language.Embedded as EDSL
 import Language.Embedded.SimpleCodeMotion
@@ -168,7 +172,7 @@ writeHtmlAST = EDSL.writeHtmlAST "tree.html" . desugar
 -- * Evaluation
 ----------------------------------------------------------------------------------------------------
 
-instance Compile NUM FeldTypes
+instance Applicative m => Compile NUM m FeldTypes
   where
     compileAlg (Abs a)   = compileAlg_a_a pNum abs a
     compileAlg (Sign a)  = compileAlg_a_a pNum signum a
@@ -176,7 +180,7 @@ instance Compile NUM FeldTypes
     compileAlg (Sub a b) = compileAlg_a_a_a pNum (-) a b
     compileAlg (Mul a b) = compileAlg_a_a_a pNum (*) a b
 
-instance Compile ORD FeldTypes
+instance Applicative m => Compile ORD m FeldTypes
   where
     compileAlg (LTH a b) = compileAlg_a_a_B pOrd (Prelude.<) a b
     compileAlg (GTH a b) = compileAlg_a_a_B pOrd (Prelude.>) a b
@@ -185,7 +189,7 @@ instance Compile ORD FeldTypes
     compileAlg (Min a b) = compileAlg_a_a_a pOrd Prelude.min a b
     compileAlg (Max a b) = compileAlg_a_a_a pOrd Prelude.max a b
 
-instance Compile Array FeldTypes
+instance (Applicative m, Monad m) => Compile Array m FeldTypes
   where
     -- getIx :: [a] -> Index -> a
     compileAlg (GetIx a i) _ cenv = do
@@ -194,13 +198,14 @@ instance Compile Array FeldTypes
         [E telem]  <- matchConM ta
         Dict       <- typeEq ta (listType telem)
         Dict       <- typeEq ti intType
-        return $ CExp telem $ (!!) <$> a' <*> i'
+        Dict       <- nonFunction telem
+        return $ CExp telem $ \env -> (!!) <$> a' env <*> i' env
     -- arrLen :: [a] -> Length
     compileAlg (ArrLen a) _ cenv = do
         CExp ta a' <- a [] cenv
         [E telem]  <- matchConM ta
         Dict       <- typeEq ta (listType telem)
-        return $ CExp intType $ Prelude.length <$> a'
+        return $ CExp intType $ \env -> Prelude.length <$> a' env
     -- parallel :: Length -> (Index -> a) -> [a]
     --
     -- parallel :: ( tf ~ (Index -> ta)
@@ -213,11 +218,16 @@ instance Compile Array FeldTypes
         [_, E ta]  <- matchConM tf
         Dict       <- typeEq tf (funType intType ta)
         Dict       <- typeEq tl intType
-        return $ CExp (listType ta) $ parallelSem <$> l' <*> f'
+        Dict       <- nonFunction ta
+        return $ CExp (listType ta) $ \env -> parallelSem (l' env) (f' env)
       where
-        parallelSem l ixf = Prelude.take l $ Prelude.map ixf [0..]
+        parallelSem ml mf = do
+            l <- ml
+            case l of
+                0 -> return []
+                _ -> Prelude.mapM mf [0 .. l-1]
 
-instance Compile ForLoop FeldTypes
+instance Monad m => Compile ForLoop m FeldTypes
   where
     -- forLoop :: Length -> s -> (Index -> s -> s) -> s
     --
@@ -231,13 +241,18 @@ instance Compile ForLoop FeldTypes
         CExp tstep step' <- step [E intType, E tinit] cenv
         Dict             <- typeEq tl intType
         Dict             <- typeEq tstep (funType intType (funType tinit tinit))
-        return $ CExp tinit $ forSem <$> l' <*> init' <*> step'
+        Dict             <- nonFunction tinit
+        return $ CExp tinit $ \env -> forSem (l' env) (init' env) (step' env)
       where
-        forSem 0 init _    = init  -- Needed when length is unsigned
-        forSem l init step = foldl (flip step) init [0..l-1]
+        forSem ml minit mstep = do
+            l    <- ml
+            init <- minit
+            case l of
+                0 -> return init  -- Needed when length is unsigned
+                _ -> foldM (flip mstep) init [0..l-1]
 
 eval :: (Syntactic a, PF a ~ FeldF, Typeable FeldTypes (Internal a)) => a -> Internal a
-eval = evalTop (Proxy :: Proxy FeldTypes) . desugar'
+eval = evalSimple (Proxy :: Proxy FeldTypes) . desugar'
 
 
 

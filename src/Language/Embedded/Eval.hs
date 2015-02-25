@@ -1,6 +1,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 -- | Typed compilation
+--
 -- See "Typing Dynamic Typing" (Baars and Swierstra, ICFP 2002) and
 -- "Efficient Evaluation for Untyped and Compositional Representations of Expressions"
 -- (<http://www.cse.chalmers.se/~emax/documents/axelsson2014efficient.pdf>)
@@ -8,6 +9,7 @@
 module Language.Embedded.Eval
     ( -- * Type universes
       module Data.TypeRep
+    , module Data.TypeRep.VarArg
       -- * Error messages
     , scopeErr
     , typedCompErr
@@ -17,6 +19,7 @@ module Language.Embedded.Eval
     , Compile (..)
     , compile
     , evalTop
+    , evalSimple
       -- * Generic compile algebras
     , compileAlg_A_B
     , compileAlg_A_B_C
@@ -28,12 +31,14 @@ module Language.Embedded.Eval
 
 
 import Control.Applicative
+import Control.Monad.Reader
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 
 import qualified Data.Syntactic as S
 import Data.TypeRep hiding ((:+:), Project (..), (:<:) (..))
+import Data.TypeRep.VarArg
 
 import Control.Monitoring
 import Data.EitherUtils
@@ -67,10 +72,13 @@ type RunEnv t = Map Name (Dynamic t)
 -- | Compiled expression
 --
 -- The first argument to `CExp` is a representation of the result type, and the second argument is a
--- function that computes an @a@ given a runtime environment.
-data CExp t
+-- monadic function that computes a value given a runtime environment.
+data CExp m t
   where
-    CExp :: TypeRep t a -> (RunEnv t -> a) -> CExp t
+    CExp :: TypeRep t a -> (RunEnv t -> FunM m (ToRes a)) -> CExp m t
+
+-- For non-functions, it would work to make `RunEnv t ->` part of the `m` in `FunM m`, and that
+-- would simplify `Compile` instances a bit. But unfortunately that doesn't work for function types.
 
 -- | An expression compiler parameterized on its compile-time environment. Note that as the compiler
 -- does not take an expression as argument, it must be specialized for a specific expression.
@@ -80,62 +88,79 @@ data CExp t
 -- are taken to be the types of @a@ and @b@ (in that order).
 --
 -- The second argument gives the types of variables in scope.
-type Compiler t = [E (TypeRep t)] -> Map Name (E (TypeRep t)) -> Either String (CExp t)
+type Compiler m t = [E (TypeRep t)] -> Map Name (E (TypeRep t)) -> Either String (CExp m t)
 
 -- | Algebra for compiling expressions
-class Compile f t
+class Compile f m t
   where
-    compileAlg :: Alg f (Compiler t)
+    compileAlg :: Alg f (Compiler m t)
 
 -- | Typed compilation
-compile :: (Compile f t, Traversable f) =>
-    Map Name (E (TypeRep t)) -> Term f -> Either String (CExp t)
+compile :: (Compile f m t, Traversable f) =>
+    Map Name (E (TypeRep t)) -> Term f -> Either String (CExp m t)
 compile cenv t = cata compileAlg t [] cenv
 
--- | Evaluate a term using typed compilation
-evalTop :: forall f t a
+-- | Evaluate an expression using typed compilation
+evalTop :: forall f m t a
     .  ( Typeable t a
-       , Compile f t
+       , Compile f m t
        , Traversable f
        , Binding :<<: f
        , FunType S.:<: t
        , TypeEq t t
        )
-    => Proxy t -> Term f -> a
-evalTop _ e = go e typeRep Map.empty
+    => Proxy t -> Proxy m -> Proxy a -> Term f -> Either String (FunM m (ToRes a))
+evalTop _ _ _ e = fmap ($ Map.empty) $ go e (typeRep :: TypeRep t a) Map.empty
   where
-    go :: Term f -> TypeRep t b -> RunEnv t -> b
-    go (Term f) t env  -- This case handles top-level lambdas
+    go :: Term f -> TypeRep t b -> Map Name (E (TypeRep t))
+       -> Either String (RunEnv t -> FunM m (ToRes b))
+    go (Term f) t cenv  -- This case handles top-level lambdas
         | Just (Lam v b) <- prj f
         , [E ta, E tb]   <- matchCon t
-        , Right Dict     <- typeEq t (funType ta tb)
-        = \a -> go b tb (Map.insert v (Dyn ta a) env)
-    go e te env
-        | Right (CExp t c) <- compile env' e
-        , Right Dict       <- typeEq t te
-        = c env
-      where
-        env' = fmap (\(Dyn t _) -> E t) env
+        = do Dict <- typeEq t (funType ta tb)
+             b'   <- go b tb (Map.insert v (E ta) cenv)
+             return $ \env -> \a -> b' $ Map.insert v (Dyn ta a) env
+    go e te cenv = do
+        CExp t c <- compile cenv e :: Either String (CExp m t)
+        Dict     <- typeEq t te
+        return c
 
-instance (Compile f t, Compile g t) => Compile (f :+: g) t
+-- | Evaluate an expression using typed compilation. Compilation errors become actual errors. The
+-- 'Id' monad is used during evaluation.
+evalSimple :: forall f t a
+    .  ( Typeable t a
+       , Compile f Id t
+       , Traversable f
+       , Binding :<<: f
+       , FunType S.:<: t
+       , TypeEq t t
+       , VarArg t
+       )
+    => Proxy t -> Term f -> a
+evalSimple pt = runMonadic runId (typeRep :: TypeRep t a) . runEither . evalTop pt pm pa
+  where
+    pa = Proxy :: Proxy a
+    pm = Proxy :: Proxy Id
+
+instance (Compile f m t, Compile g m t) => Compile (f :+: g) m t
   where
     compileAlg (Inl f) = compileAlg f
     compileAlg (Inr f) = compileAlg f
 
-instance (FunType S.:<: t, TypeEq t t) => Compile Binding t
+instance (FunType S.:<: t, TypeEq t t, VarArg t, MonadErr m) => Compile Binding m t
   where
     compileAlg (Var v) _ cenv = do
-        E t <- may (typedCompErr $ scopeErr v) $ Map.lookup v cenv
-        return $ CExp t $ \env -> runEither $ do
+        E t  <- may (typedCompErr $ scopeErr v) $ Map.lookup v cenv
+        Dict <- nonFunction t
+        return $ CExp t $ \env -> do
             Dyn t' a <- may (evalErr $ scopeErr v) $ Map.lookup v env
             Dict     <- typeEq t t'
             return a
     compileAlg (Lam v b) (E t : aenv) cenv = do
         CExp tb b' <- b aenv (Map.insert v (E t) cenv)
-        return $ CExp (funType t tb) $
-            \env -> \a -> b' (Map.insert v (Dyn t a) env)
+        return $ CExp (funType t tb) $ \env -> \a -> b' (Map.insert v (Dyn t a) env)
 
-instance (FunType S.:<: t, TypeEq t t) => Compile Let t
+instance (FunType S.:<: t, TypeEq t t, VarArg t, Monad m) => Compile Let m t
   where
     -- let :: a -> (a -> b) -> b
     compileAlg (Let a f) _ cenv = do
@@ -143,23 +168,29 @@ instance (FunType S.:<: t, TypeEq t t) => Compile Let t
         CExp tf f' <- f [E ta] cenv
         [_, E tb]  <- matchConM tf
         Dict       <- typeEq tf (funType ta tb)
-        return $ CExp tb $ (flip ($)) <$> a' <*> f'
+        Dict       <- nonFunction ta
+        Dict       <- nonFunction tb
+        return $ CExp tb $ \env -> f' env =<< a' env
 
-instance (FunType S.:<: t, TypeEq t t) => Compile App t
+instance (FunType S.:<: t, TypeEq t t, VarArg t, Monad m) => Compile App m t
   where
-    -- let :: a -> (a -> b) -> b
+    -- app :: (a -> b) -> a -> b
     compileAlg (App f a) _ cenv = do
         CExp ta a' <- a [] cenv
         CExp tf f' <- f [E ta] cenv
         [_, E tb]  <- matchConM tf
         Dict       <- typeEq tf (funType ta tb)
-        return $ CExp tb $ ($) <$> f' <*> a'
+        Dict       <- nonFunction ta
+        Dict       <- nonFunction tb
+        return $ CExp tb $ \env -> f' env =<< a' env
 
-instance SubUniverse tLit t => Compile (Lit tLit) t
+instance (SubUniverse tLit t, VarArg tLit, Applicative m) => Compile (Lit tLit) m t
   where
-    compileAlg (Lit (Dyn ta a)) _ _ = return $ CExp (weakenUniverse ta) $ \_ -> a
+    compileAlg (Lit (Dyn ta a)) _ _ = do
+        Dict <- nonFunction ta
+        return $ CExp (weakenUniverse ta) $ \_ -> pure a
 
-instance (BoolType S.:<: t, TypeEq t t) => Compile Cond t
+instance (BoolType S.:<: t, TypeEq t t, VarArg t, Applicative m) => Compile Cond m t
   where
     -- cond :: Bool -> a -> a -> a
     compileAlg (Cond c t f) _ cenv = do
@@ -168,7 +199,8 @@ instance (BoolType S.:<: t, TypeEq t t) => Compile Cond t
         CExp tf f' <- f [] cenv
         Dict       <- typeEq tc boolType
         Dict       <- typeEq tt tf
-        return $ CExp tt $ iff <$> c' <*> t' <*> f'
+        Dict       <- nonFunction tt
+        return $ CExp tt $ \env -> iff <$> c' env <*> t' env <*> f' env
       where
         iff c t f = if c then t else f
 
@@ -179,53 +211,75 @@ instance (BoolType S.:<: t, TypeEq t t) => Compile Cond t
 ----------------------------------------------------------------------------------------------------
 
 -- | General implementation of 'compileAlg' for construct of type @A -> B@
-compileAlg_A_B :: forall t a b . (TypeEq t t, Typeable t a, Typeable t b) =>
-    (a -> b) -> Compiler t -> Compiler t
+compileAlg_A_B :: forall t a b m
+    .  ( TypeEq t t
+       , Typeable t a
+       , Typeable t b
+       , NonFunction a
+       , NonFunction b
+       , Applicative m
+       )
+    => (a -> b) -> Compiler m t -> Compiler m t
 compileAlg_A_B f a _ cenv = do
     CExp ta a' <- a [] cenv
     Dict       <- typeEq ta (typeRep :: TypeRep t a)
-    return $ CExp typeRep $ f <$> a'
+    return $ CExp (typeRep :: TypeRep t b) $ \env -> f <$> a' env
 
 -- | General implementation of 'compileAlg' for construct of type @A -> B -> C@
-compileAlg_A_B_C :: forall t a b c
+compileAlg_A_B_C :: forall t a b c m
     .  ( TypeEq t t
        , Typeable t a
        , Typeable t b
        , Typeable t c
+       , NonFunction a
+       , NonFunction b
+       , NonFunction c
+       , Applicative m
        )
-    => (a -> b -> c) -> Compiler t -> Compiler t -> Compiler t
+    => (a -> b -> c) -> Compiler m t -> Compiler m t -> Compiler m t
 compileAlg_A_B_C f a b _ cenv = do
     CExp ta a' <- a [] cenv
     CExp tb b' <- b [] cenv
     Dict       <- typeEq ta (typeRep :: TypeRep t a)
     Dict       <- typeEq tb (typeRep :: TypeRep t b)
-    return $ CExp typeRep $ f <$> a' <*> b'
+    return $ CExp (typeRep :: TypeRep t c) $ \env -> f <$> a' env <*> b' env
 
 -- | General implementation of 'compileAlg' for construct of type @p a => a -> a@
-compileAlg_a_a :: PWitness p t t =>
-    Proxy p -> (forall a . p a => a -> a) -> Compiler t -> Compiler t
+compileAlg_a_a :: (PWitness p t t, VarArg t, Functor m) =>
+    Proxy p -> (forall a . p a => a -> a) -> Compiler m t -> Compiler m t
 compileAlg_a_a p f a _ cenv = do
     CExp ta a' <- a [] cenv
     Dict       <- pwit p ta
-    return $ CExp ta $ f <$> a'
+    Dict       <- nonFunction ta
+    return $ CExp ta $ \env -> f <$> a' env
 
 -- | General implementation of 'compileAlg' for construct of type @p a => a -> a -> a@
-compileAlg_a_a_a :: (TypeEq t t, PWitness p t t) =>
-    Proxy p -> (forall a . p a => a -> a -> a) -> Compiler t -> Compiler t -> Compiler t
+compileAlg_a_a_a :: (TypeEq t t, PWitness p t t, VarArg t, Applicative m) =>
+    Proxy p -> (forall a . p a => a -> a -> a) -> Compiler m t -> Compiler m t -> Compiler m t
 compileAlg_a_a_a p f a b _ cenv = do
     CExp ta a' <- a [] cenv
     CExp tb b' <- b [] cenv
     Dict       <- typeEq ta tb
     Dict       <- pwit p ta
-    return $ CExp ta $ f <$> a' <*> b'
+    Dict       <- nonFunction ta
+    return $ CExp ta $ \env -> f <$> a' env <*> b' env
 
 -- | General implementation of 'compileAlg' for construct of type @p a => a -> a -> B@
-compileAlg_a_a_B :: (TypeEq t t, PWitness p t t, Typeable t b) =>
-    Proxy p -> (forall a . p a => a -> a -> b) -> Compiler t -> Compiler t -> Compiler t
-compileAlg_a_a_B p f a b _ cenv = do
-    CExp ta a' <- a [] cenv
-    CExp tb b' <- b [] cenv
-    Dict       <- pwit p ta
-    Dict       <- typeEq ta tb
-    return $ CExp typeRep $ f <$> a' <*> b'
+compileAlg_a_a_B :: forall t p b m
+    .  ( TypeEq t t
+       , PWitness p t t
+       , Typeable t b
+       , VarArg t
+       , Applicative m
+       )
+    => Proxy p -> (forall a . p a => a -> a -> b) -> Compiler m t -> Compiler m t -> Compiler m t
+compileAlg_a_a_B p f a1 a2 _ cenv = do
+    CExp ta1 a1' <- a1 [] cenv
+    CExp ta2 a2' <- a2 [] cenv
+    Dict         <- pwit p ta1
+    Dict         <- typeEq ta1 ta2
+    let tb       =  typeRep :: TypeRep t b
+    Dict         <- nonFunction ta1
+    Dict         <- nonFunction tb
+    return $ CExp tb $ \env -> f <$> a1' env <*> a2' env
 
