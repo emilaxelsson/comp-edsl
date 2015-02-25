@@ -26,14 +26,14 @@ import Control.Monitoring
 -- * Expressions with monitoring
 ----------------------------------------------------------------------------------------------------
 
-add :: (MonadErr m, MonadFuel m) => Int -> Int -> m Int
+add :: MonadFuel m => Int -> Int -> m Int
 add a b = tick >> return (a+b)
 
-divv :: (MonadErr m, MonadFuel m) => Int -> Int -> m Int
+divv :: MonadFuel m => Int -> Int -> m Int
 divv a 0 = throw "division by zero"
 divv a b = tick >> return (a `div` b)
 
-iter :: (MonadErr m, MonadLogger m, MonadFuel m) => Int -> (a -> m a) -> a -> m a
+iter :: (MonadLogger m, MonadFuel m) => Int -> (a -> m a) -> a -> m a
 iter n f a = do
     logg "iter-start"
     tick
@@ -46,7 +46,7 @@ iter n f a = do
         tick
         go (n-1) =<< f a
 
-expr :: (MonadErr m, MonadLogger m, MonadFuel m) => Int -> m Int
+expr :: (MonadLogger m, MonadFuel m) => Int -> m Int
 expr a = iter a f a
   where
     f x = iter x g x
