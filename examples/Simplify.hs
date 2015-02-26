@@ -1,6 +1,7 @@
 import Data.Foldable (Foldable)
 import qualified Data.Foldable as Foldable
 
+import Data.EitherUtils
 import Language.Embedded
 import Language.Embedded.Sharing
 
@@ -50,7 +51,7 @@ sizeProp f = f :&: 100  -- TODO
 viewLit :: Defs (FeldF :&: Size) -> DAG (FeldF :&: Size) -> Maybe Int
 viewLit env t = do
     Lit (Dyn typ i :: Dynamic FeldTypesSimple) <- open env t
-    Dict <- typeEq typ intType
+    Dict <- toMaybe $ typeEq typ intType
     return i
 
 simplify :: Defs (FeldF :&: Size) -> DAG FeldF -> DAG (FeldF :&: Size)
