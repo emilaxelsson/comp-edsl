@@ -16,7 +16,7 @@ runEither :: Either String a -> a
 runEither (Right a)  = a
 runEither (Left msg) = error msg
 
-rightToMaybe :: Either a b -> Maybe b
-rightToMaybe (Right a) = Just a
-rightToMaybe _         = Nothing
+toMaybe :: Either a b -> Maybe b
+toMaybe (Right a) = Just a
+toMaybe _         = Nothing
 
