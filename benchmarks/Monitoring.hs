@@ -11,17 +11,15 @@ import Control.Monitoring
 --
 --   * `testI` is ~10% slower than `testRef`
 --   * `testE` is ~14% slower than `testRef`
---   * `testFE` is ~14% slower than `testRef`
---   * `testF`, `testEF` and `testFE` take almost identical time: ~5x slower than `testRef`
+--   * `testF`, `testEF` and `testFE` take almost identical time: ~3.5x slower than `testRef`
 --   * `testL` is ~8x slower than `testRef`
---   * `testLFE` is ~15x slower than `testRef`
+--   * `testLFE` is ~14x slower than `testRef`
 --
 -- Additional discoveries:
 --
 --   * Using `Control.Monad.State.Lazy` made no noticeable difference
 --   * Using `Control.Monad.Writer.Lazy` made the tests with logging a bit slower (~25%)
 --   * Making `(>>=)` lazy for `Id` made no difference
---   * Using `Int` instead of `Integer` for `FuelT` makes those tests ~30% faster
 
 
 

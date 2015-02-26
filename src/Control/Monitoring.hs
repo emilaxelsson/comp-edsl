@@ -19,6 +19,7 @@ import Control.Applicative
 import Control.Monad.Error
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict
+import Data.Int
 
 
 
@@ -119,15 +120,17 @@ instance MonadWriter [String] Id
 -- * Fuel
 ----------------------------------------------------------------------------------------------------
 
--- | A computation \"on fuel\"
-type FuelT m = StateT Integer m
+type Fuel = Int64
 
-type MonadFuel m = (MonadErr m, MonadState Integer m)
+-- | A computation \"on fuel\"
+type FuelT m = StateT Fuel m
+
+type MonadFuel m = (MonadErr m, MonadState Fuel m)
 
 -- | Run a computation on fuel
 runFuelT :: Monad m
     => FuelT m a  -- ^ Computation on fuel
-    -> Integer    -- ^ Amount of fuel to start with
+    -> Fuel      -- ^ Amount of fuel to start with
     -> m a
 runFuelT = evalStateT
 
@@ -140,7 +143,7 @@ tick = do
     put fuel'
 
 -- | Fake instance that always has the state 1 (so that there's always fuel left)
-instance MonadState Integer Id
+instance MonadState Fuel Id
   where
     get   = return 1
     put _ = return ()

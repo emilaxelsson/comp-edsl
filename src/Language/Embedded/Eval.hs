@@ -133,7 +133,7 @@ evalFuel :: forall f t a
        , VarArg t
        )
     => Proxy t
-    -> Integer  -- ^ Amout of fuel to start with
+    -> Fuel  -- ^ Amout of fuel to start with
     -> Term f
     -> a
 evalFuel pt fuel
