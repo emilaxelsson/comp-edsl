@@ -86,10 +86,19 @@ test-suite General
     FlexibleContexts
 
   other-extensions:
+    ConstraintKinds
+    DeriveFoldable
+    DeriveFunctor
+    DeriveTraversable
+    FlexibleInstances
+    GADTs
+    MultiParamTypeClasses
     NoMonomorphismRestriction
     ScopedTypeVariables
     TemplateHaskell
+    TypeFamilies
     TypeOperators
+    UndecidableInstances
 
   build-depends:
     compdata,
