@@ -122,6 +122,22 @@ evalSimple pt = runMonadic runId (typeRep :: TypeRep t a) . runEither . evalTop 
     pa = Proxy :: Proxy a
     pm = Proxy :: Proxy Id
 
+-- | Evaluate an expression in the monad @(`ErrT` `Id`)@
+evalErr :: forall f t a
+    .  ( Typeable t a
+       , Compile f (ErrT Id) t
+       , Traversable f
+       , Binding :<<: f
+       , FunType S.:<: t
+       , TypeEq t t
+       , VarArg t
+       )
+    => Proxy t -> Term f -> a
+evalErr pt
+    = runMonadic (runId . execErrT) (typeRep :: TypeRep t a)
+    . runEither
+    . evalTop pt (Proxy :: Proxy (ErrT Id)) (Proxy :: Proxy a)
+
 -- | Evaluate an expression in the monad @(`ErrT` (`FuelT` `Id`))@
 evalFuel :: forall f t a
     .  ( Typeable t a
