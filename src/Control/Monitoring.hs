@@ -23,6 +23,10 @@ import Data.Int
 
 
 
+-- TODO Use newtypes/classes instead of synonyms for the monads/monad classes.
+
+
+
 ----------------------------------------------------------------------------------------------------
 -- * Identity monad
 ----------------------------------------------------------------------------------------------------
@@ -90,6 +94,9 @@ may msg (Just a) = return a
 ----------------------------------------------------------------------------------------------------
 -- * Logging
 ----------------------------------------------------------------------------------------------------
+
+-- TODO Logging is quite slow (see the benchmarks). Could it be sped up using a state monad? But
+-- then it should be a newtype because `FuelT` is already a state monad.
 
 -- | Logging monad
 type LoggerT = WriterT [String]

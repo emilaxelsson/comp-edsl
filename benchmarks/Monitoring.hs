@@ -20,6 +20,7 @@ import Control.Monitoring
 --   * Using `Control.Monad.State.Lazy` made no noticeable difference
 --   * Using `Control.Monad.Writer.Lazy` made the tests with logging a bit slower (~25%)
 --   * Making `(>>=)` lazy for `Id` made no difference
+--   * Using `Seq` instead of `[]` in `LoggerT` makes it only a tiny bit faster
 
 
 
