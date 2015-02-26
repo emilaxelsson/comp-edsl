@@ -160,6 +160,7 @@ benchmark monitoring
   default-language: Haskell2010
 
   default-extensions:
+    BangPatterns
     ConstraintKinds
     FlexibleContexts
 
