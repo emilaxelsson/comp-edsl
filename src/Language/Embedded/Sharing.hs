@@ -15,11 +15,8 @@ module Language.Embedded.Sharing where
 
 
 import qualified Data.Foldable as Foldable
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Tree (Tree (..))

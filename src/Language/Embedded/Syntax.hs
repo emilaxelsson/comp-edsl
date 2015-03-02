@@ -66,6 +66,10 @@ module Language.Embedded.Syntax
     , (:<<:) (..)
     , prj
     , prjTerm
+    , withSub
+    , withSub'
+    , withSubTerm
+    , withSubTerm'
       -- * Syntactic sugar
     , Syntactic (..)
     , resugar

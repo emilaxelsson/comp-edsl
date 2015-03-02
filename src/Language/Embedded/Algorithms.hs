@@ -3,7 +3,6 @@ module Language.Embedded.Algorithms where
 
 
 import Control.Monad.State
-import Data.Foldable (Foldable, toList)
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -72,7 +71,7 @@ alphaEq' env lam1 lam2
     = alphaEq' ((v1,v2):env) body1 body2
 alphaEq' env (Term a) (Term b)
     =  constrEq a b
-    && all (uncurry (alphaEq' env)) (zip (toList a) (toList b))
+    && all (uncurry (alphaEq' env)) (zip (Foldable.toList a) (Foldable.toList b))
 
 -- | Alpha-equivalence
 alphaEq :: (EqF f, Binding :<<: f, Functor f, Foldable f) => Term f -> Term f -> Bool
@@ -180,6 +179,6 @@ match = go Map.empty
       = go (Map.insert v w env) p' t'
     go env (Term pf) (Term tf)
       | constrEq pf tf
-      = fmap concat $ sequence [go env p t | (p,t) <- toList pf `zip` toList tf]
+      = fmap concat $ sequence [go env p t | (p,t) <- Foldable.toList pf `zip` Foldable.toList tf]
     go _ _ _ = Nothing
 

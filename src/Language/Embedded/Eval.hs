@@ -15,6 +15,8 @@ module Language.Embedded.Eval
     , Compile (..)
     , compile
     , evalTop
+    , evalErr
+    , evalFuel
     , evalSimple
       -- * Generic compile algebras
     , compileAlg_A_B
@@ -27,10 +29,8 @@ module Language.Embedded.Eval
 
 
 import Control.Applicative
-import Control.Monad.Reader
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust)
 
 import qualified Data.Syntactic as S
 import Data.TypeRep hiding ((:+:), Project (..), (:<:) (..))

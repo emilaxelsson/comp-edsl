@@ -29,7 +29,6 @@ import Control.Monad (foldM)
 import qualified Data.Syntactic as S
 
 import Control.Monitoring
-import Data.EitherUtils
 import Language.Embedded hiding (showAST, drawAST, writeHtmlAST)
 import qualified Language.Embedded as EDSL
 import Language.Embedded.SimpleCodeMotion
