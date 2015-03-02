@@ -1,3 +1,7 @@
+module Simplify where
+
+
+
 import Data.Foldable (Foldable)
 import qualified Data.Foldable as Foldable
 
