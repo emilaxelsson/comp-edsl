@@ -333,7 +333,7 @@ index :: Vector a -> Data Index -> a
 index (Indexed _ ixf) = ixf
 
 (!) :: Vector a -> Data Index -> a
-Indexed _ ixf ! i = ixf i
+(!) (Indexed _ ixf) i = ixf i
 
 infixl 9 !
 
