@@ -4,15 +4,13 @@ synopsis:       A library for creating Deeply embedded DSLs in Haskell
 description:    A library for creating Deeply embedded DSLs in Haskell
                 .
                 Compass might stand for "Compositional Abstract Syntax and Semantics".
-homepage:       https://github.com/emilaxelsson/compass
-bug-reports:    https://github.com/emilaxelsson/compass/issues
 license:        BSD3
 license-file:   LICENSE
 author:         Emil Axelsson
 maintainer:     emax@chalmers.se
 copyright:      Copyright (c) 2014, Emil Axelsson
-Homepage:       https://github.com/emilaxelsson/syntactic
-Bug-reports:    https://github.com/emilaxelsson/syntactic/issues
+homepage:       https://github.com/emilaxelsson/compass
+bug-reports:    https://github.com/emilaxelsson/compass/issues
 stability:      experimental
 category:       Language
 build-type:     Simple
